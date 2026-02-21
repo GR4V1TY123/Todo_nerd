@@ -28,6 +28,7 @@ function EditorPage() {
   const [newCharacterRole, setNewCharacterRole] = useState('')
   const [expandedCharacters, setExpandedCharacters] = useState([])
   const [worldElements, setWorldElements] = useState([])
+  const [isGeneratingSynopsis, setIsGeneratingSynopsis] = useState(false)
   const [isGeneratingWorldbuilding, setIsGeneratingWorldbuilding] = useState(false)
   const [isGeneratingChapters, setIsGeneratingChapters] = useState(false)
   const [upgradeButtonText, setUpgradeButtonText] = useState('Upgrade')
@@ -1104,19 +1105,9 @@ function EditorPage() {
   }
 
   const handleGenerateSynopsis = async () => {
-    const base = storyBible.synopsis.trim()
-    const line =
-      storyBible.braindump || 'Describe what happens to your main character and what’s at stake.'
-    const genre = storyBible.genre || 'your chosen genre'
-    const generated = `In this ${genre} story, ${line}`
-
-    // Call API instead of generating locally
+    setIsGeneratingSynopsis(true)
     try {
-      const charactersData = charactersList.map(ch => ({
-        name: ch.name,
-        role: ch.role || 'Character',
-        shortDescription: ch.summary || ch.personality || ''
-      }))
+      const characterNames = charactersList.map((ch) => ch.name).filter(Boolean)
 
       const genreString = selectedGenres.length > 0
         ? selectedGenres.join(', ')
@@ -1128,10 +1119,10 @@ function EditorPage() {
         dump: storyBible.braindump || 'No braindump provided',
         genre: genreString,
         style: styleString,
-        characters: charactersData
+        characters: characterNames
       }
 
-      const response = await fetch('http://164.52.213.163/hacks/synopsis', {
+      const response = await fetch('http://164.52.218.116/hacks/synopsis', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1145,33 +1136,24 @@ function EditorPage() {
 
       const data = await response.json()
       if (data.synopsis) {
-        setStoryBible({
-          ...storyBible,
+        setStoryBible((prev) => ({
+          ...prev,
           synopsis: data.synopsis
-        })
+        }))
       } else {
         alert('No synopsis returned from API')
       }
     } catch (error) {
       console.error('Error generating synopsis:', error)
-      alert(`Failed to generate synopsis: ${error.message}. Make sure the API server is running on port 8082.`)
-      // Fallback to local generation if API fails
-      setStoryBible({
-        ...storyBible,
-        synopsis: base ? `${base}\n\n${generated}` : generated,
-      })
+      alert(`Failed to generate synopsis: ${error.message}`)
+    } finally {
+      setIsGeneratingSynopsis(false)
     }
   }
 
   const handleGenerateWorldbuilding = async () => {
     setIsGeneratingWorldbuilding(true)
     try {
-      const charactersData = charactersList.map(ch => ({
-        name: ch.name,
-        role: ch.role || 'Character',
-        shortDescription: ch.summary || ch.personality || ''
-      }))
-
       const genreString = selectedGenres.length > 0
         ? selectedGenres.join(', ')
         : customGenreIdeas || 'General Fiction'
@@ -1182,11 +1164,10 @@ function EditorPage() {
         dump: storyBible.braindump || 'No braindump provided',
         genre: genreString,
         style: styleString,
-        synopsis: storyBible.synopsis || 'No synopsis provided',
-        characters: charactersData
+        synopsis: storyBible.synopsis || 'No synopsis provided'
       }
 
-      const response = await fetch('http://164.52.213.163/hacks/worldbuilding', {
+      const response = await fetch('http://164.52.218.116/hacks/worldbuilding', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1209,7 +1190,7 @@ function EditorPage() {
       }
     } catch (error) {
       console.error('Error generating worldbuilding:', error)
-      alert(`Failed to generate worldbuilding: ${error.message}. Make sure the worldbuilding service is running on port 8082.`)
+      alert(`Failed to generate worldbuilding: ${error.message}`)
     } finally {
       setIsGeneratingWorldbuilding(false)
     }
@@ -1218,12 +1199,6 @@ function EditorPage() {
   const handleGenerateChapters = async () => {
     setIsGeneratingChapters(true)
     try {
-      const charactersData = charactersList.map(ch => ({
-        name: ch.name,
-        role: ch.role || 'Character',
-        shortDescription: ch.summary || ch.personality || ''
-      }))
-
       const genreString = selectedGenres.length > 0
         ? selectedGenres.join(', ')
         : customGenreIdeas || 'General Fiction'
@@ -1236,11 +1211,10 @@ function EditorPage() {
         style: styleString,
         synopsis: storyBible.synopsis || 'No synopsis provided',
         worldbuilding: storyBible.worldbuilding || 'No worldbuilding provided',
-        chapternumber: chapters.length || 1,
-        characters: charactersData
+        chapternumber: chapters.length || 1
       }
 
-      const response = await fetch('http://164.52.213.163/hacks/chapters', {
+      const response = await fetch('http://164.52.218.116/hacks/chapters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1266,7 +1240,7 @@ function EditorPage() {
       }
     } catch (error) {
       console.error('Error generating chapters:', error)
-      alert(`Failed to generate chapters: ${error.message}. Make sure the chapters service is running on port 8082.`)
+      alert(`Failed to generate chapters: ${error.message}`)
     } finally {
       setIsGeneratingChapters(false)
     }
@@ -1351,6 +1325,7 @@ function EditorPage() {
               handleGenerateChapters={handleGenerateChapters}
               handleGenerateOutline={handleGenerateOutline}
               handleGenerateSynopsis={handleGenerateSynopsis}
+              isGeneratingSynopsis={isGeneratingSynopsis}
               chapters={chapters}
               setChapters={setChapters}
               selectedChapterId={selectedChapterId}

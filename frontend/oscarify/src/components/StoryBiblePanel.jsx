@@ -40,6 +40,7 @@ function StoryBiblePanel({
   handleGenerateChapters,
   handleGenerateOutline,
   handleGenerateSynopsis,
+  isGeneratingSynopsis,
   chapters,
   setChapters,
   selectedChapterId,
@@ -428,8 +429,9 @@ function StoryBiblePanel({
               type="button"
               className="secondary-pill-btn"
               onClick={handleGenerateSynopsis}
+              disabled={isGeneratingSynopsis}
             >
-              Generate Synopsis
+              {isGeneratingSynopsis ? 'Generating...' : 'Generate Synopsis'}
             </button>
           </div>
         </div>
