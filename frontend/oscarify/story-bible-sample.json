@@ -1,0 +1,107 @@
+{
+  "braindump": "A young musician from a small town discovers a mysterious artifact that allows her to communicate with supernatural beings. She must navigate between the human world and the spirit realm to prevent a catastrophic collision between dimensions. Themes: belonging, identity, sacrifice, found family.",
+  "genre": {
+    "selectedGenres": ["Paranormal Romance", "Urban Fantasy", "Contemporary Supernatural"],
+    "customGenreIdeas": "Add magical realism elements and found family tropes"
+  },
+  "style": {
+    "styleNotes": "Lyrical and atmospheric prose with introspective moments. Witty banter balanced with intense emotional depth. First-person narrative with occasional third-person supernatural scenes.",
+    "selectedStyle": "featured",
+    "customStyleIdeas": "Blend of modern urban settings with ethereal, dreamlike supernatural elements. Use of magical realism techniques."
+  },
+  "characters": [
+    {
+      "id": 1,
+      "name": "Mira Chen",
+      "role": "Protagonist",
+      "pronouns": "she/her",
+      "groups": "Musicians, Sensitive",
+      "otherNames": "",
+      "personality": "Introverted, lyrical, empathetic, curious about the spirit world.",
+      "motivations": "Understand her gift and protect both worlds from harm.",
+      "internalConflict": "Fear of losing her normal life if she embraces the supernatural.",
+      "strengths": "Artistic intuition, emotional empathy.",
+      "weaknesses": "Self-doubt, reluctance to ask for help.",
+      "arc": "From fearful outsider to confident bridge between worlds.",
+      "physicalDescription": "17, slight, keeps her hair in a messy bun, often with a guitar.",
+      "dialogueStyle": "Soft, observant, sometimes poetic.",
+      "summary": "17-year-old protagonist. Introverted musician with a gift for connecting with spirits."
+    },
+    {
+      "id": 2,
+      "name": "Kai Ashford",
+      "role": "Supporting",
+      "pronouns": "he/him",
+      "groups": "Journalists",
+      "otherNames": "",
+      "personality": "Skeptical, curious, grounded.",
+      "motivations": "To find the truth and prove himself as a reporter.",
+      "internalConflict": "Balancing skepticism with growing belief.",
+      "strengths": "Analytical, protective.",
+      "weaknesses": "Closed-off emotionally.",
+      "arc": "Learns to trust and support Mira's journey.",
+      "physicalDescription": "19, practical clothing, notebook always at hand.",
+      "dialogueStyle": "Direct, probing questions.",
+      "summary": "19-year-old local journalist, skeptical but drawn into the mystery."
+    },
+    {
+      "id": 3,
+      "name": "Vesper",
+      "role": "Spirit Guide",
+      "pronouns": "they/them",
+      "groups": "Ancient spirits",
+      "otherNames": "",
+      "personality": "Mysterious, wise, patient.",
+      "motivations": "Guide Mira and restore balance between worlds.",
+      "internalConflict": "Bound by ancient rules yet compassionate.",
+      "strengths": "Knowledge of the spirit realm.",
+      "weaknesses": "Detached from human emotions.",
+      "arc": "Learns to trust human agency.",
+      "physicalDescription": "Ethereal presence, shifting form.",
+      "dialogueStyle": "Elliptical, ancient cadence.",
+      "summary": "Ethereal spirit guide trapped between worlds."
+    },
+    {
+      "id": 4,
+      "name": "Sarah Chen",
+      "role": "Mentor",
+      "pronouns": "she/her",
+      "groups": "Family",
+      "otherNames": "",
+      "personality": "Protective, pragmatic.",
+      "motivations": "Protect Mira while hiding painful knowledge.",
+      "internalConflict": "Guilt over past choices.",
+      "strengths": "Wisdom, resilience.",
+      "weaknesses": "Secretive.",
+      "arc": "Opens up and helps Mira accept her role.",
+      "physicalDescription": "Older, warm eyes, practical clothing.",
+      "dialogueStyle": "Concise, caring.",
+      "summary": "Mira's grandmother who knows more about the supernatural."
+    },
+    {
+      "id": 5,
+      "name": "Marcus Webb",
+      "role": "Antagonist",
+      "pronouns": "he/him",
+      "groups": "Rogue spirits",
+      "otherNames": "",
+      "personality": "Charismatic, dangerous, driven.",
+      "motivations": "Break the barrier to gain power.",
+      "internalConflict": "Haunted by trauma that drove him to extremes.",
+      "strengths": "Manipulative, powerful.",
+      "weaknesses": "Hubris.",
+      "arc": "Tragic villain whose choices escalate conflict.",
+      "physicalDescription": "Tall, shadowed presence.",
+      "dialogueStyle": "Smooth, persuasive.",
+      "summary": "The antagonist who seeks to break the dimensional barrier."
+    }
+  ],
+  "synopsis": "When 17-year-old musician Mira discovers an ancient artifact that reveals the existence of spirits, she becomes the unlikely bridge between the human and spirit worlds. A rogue spirit named Marcus seeks to shatter the dimensional barrier for personal gain, threatening to destroy both realms. With help from her skeptical friend Kai and her mysterious spirit guide Vesper, Mira must master her newfound powers and stop Marcus before the collision of dimensions destroys everything she loves.",
+  "worldbuilding": "The story exists in a contemporary urban setting with hidden supernatural layers. The spirit realm exists parallel to the human world, accessible through specific locations and artifacts. Spirits vary in age, power, and intention—some benevolent guides, others dangerous entities. The dimensional barrier is weakening due to centuries of accumulated magical imbalance. Ancient artifacts can temporarily bridge the two worlds. Only certain humans possess the latent ability to perceive and communicate with spirits—a gift that manifests through emotional sensitivity and artistic expression.",
+  "outline": "Act I: Mira discovers the artifact and makes first contact with Vesper; learns of the dimensional crisis. Act II: Kai joins Mira's quest; they research artifacts and spirit lore while being hunted by Marcus; Mira struggles to control her powers. Act III: Marcus reveals his tragic past; Mira confronts the choice between redemption and destruction; climactic battle between realms; resolution shows new harmony between worlds.",
+  "chapters": [
+    { "id": 1, "name": "Chapter 1" },
+    { "id": 2, "name": "Chapter 2" },
+    { "id": 3, "name": "Chapter 3" }
+  ]
+}
