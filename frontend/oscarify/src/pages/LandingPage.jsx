@@ -77,7 +77,7 @@ function LandingPage() {
 
           <nav className="lp-nav">
             <a href="#features" className="lp-nav-link">Features</a>
-            <a href="#pricing" className="lp-nav-link">Pricing</a>
+            <a href="#pricing" className="lp-nav-link">Working</a>
             <a href="#reviews" className="lp-nav-link">Reviews</a>
             <a href="#blog" className="lp-nav-link">Blog</a>
           </nav>
