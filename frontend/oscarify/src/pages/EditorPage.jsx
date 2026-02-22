@@ -600,7 +600,7 @@ function EditorPage() {
     }
   }
 
-  // Process the current chapter text via /hacks/process-chapter
+  // Validate current chapter then insert if consistent
   const processCurrentChapter = async () => {
     try {
       const currentHtml = editorRef.current ? editorRef.current.innerHTML : ''
@@ -609,18 +609,44 @@ function EditorPage() {
       ).trim()
       if (!text) return
 
-      const res = await fetch('http://164.52.218.116/hacks/process-chapter', {
+      // Step 1: validate chapter consistency
+      const validateRes = await fetch('http://164.52.218.116/hacks/validate-chapter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       })
-      if (!res.ok) {
-        console.warn('process-chapter request failed:', res.status)
-        
+      if (!validateRes.ok) {
+        console.warn('validate-chapter request failed:', validateRes.status)
         return
       }
-        console.log(await res.json());
-      console.debug('process-chapter ok')
+      const validateData = await validateRes.json()
+      console.debug('validate-chapter response:', validateData)
+
+      if (!validateData.consistent) {
+        // Show report in chat with red background
+        setChatMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now(),
+            sender: 'assistant',
+            type: 'validation-error',
+            text: validateData.report || 'Consistency issue detected.',
+          },
+        ])
+        return
+      }
+
+      // Step 2: insert chapter since it's consistent
+      const insertRes = await fetch('http://164.52.218.116/hacks/insert-chapter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+      if (!insertRes.ok) {
+        console.warn('insert-chapter request failed:', insertRes.status)
+        return
+      }
+      console.debug('insert-chapter ok')
       setShowSyncToast(true)
       setTimeout(() => setShowSyncToast(false), 3000)
     } catch (err) {
@@ -1940,6 +1966,11 @@ function EditorPage() {
                       </div>
                     ) : msg.type === 'memory' ? (
                       <div className="memory-message">{msg.text}</div>
+                    ) : msg.type === 'validation-error' ? (
+                      <div style={{ background: '#ef444422', border: '1px solid #ef4444', borderRadius: 8, padding: '10px 14px', color: '#ef4444' }}>
+                        <div style={{ fontWeight: 600, marginBottom: 4 }}>⚠ Consistency Issue</div>
+                        <div style={{ fontSize: '0.9em', lineHeight: 1.5 }}>{msg.text}</div>
+                      </div>
                     ) : (
                       msg.text
                     )}
