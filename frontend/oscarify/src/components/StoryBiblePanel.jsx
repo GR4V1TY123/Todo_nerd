@@ -1,4 +1,5 @@
 ﻿import { useRef, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
 
 function StoryBiblePanel({
   storyBible,
@@ -40,6 +41,7 @@ function StoryBiblePanel({
   handleGenerateChapters,
   handleGenerateOutline,
   handleGenerateSynopsis,
+  isGeneratingSynopsis,
   chapters,
   setChapters,
   selectedChapterId,
@@ -70,6 +72,15 @@ function StoryBiblePanel({
 
   const scrollToSection = (key) => {
     sectionRefs[key]?.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  const MarkdownPreview = ({ content }) => {
+    if (!content || !content.trim()) return null
+    return (
+      <div className="story-bible-markdown">
+        <ReactMarkdown>{content}</ReactMarkdown>
+      </div>
+    )
   }
 
   return (
@@ -428,8 +439,9 @@ function StoryBiblePanel({
               type="button"
               className="secondary-pill-btn"
               onClick={handleGenerateSynopsis}
+              disabled={isGeneratingSynopsis}
             >
-              Generate Synopsis
+              {isGeneratingSynopsis ? 'Generating...' : 'Generate Synopsis'}
             </button>
           </div>
         </div>
@@ -437,13 +449,17 @@ function StoryBiblePanel({
           Introduce the characters, their goals, and the central conflict, while conveying the story&apos;s tone.
         </p>
         <div className="section-content">
-          <textarea
-            className="story-bible-textarea auto-resize"
-            placeholder="In a last‑chance hackathon, a mismatched team must overcome bias and burnout to ship a wild idea..."
-            value={storyBible.synopsis}
-            onChange={(e) => setStoryBible({ ...storyBible, synopsis: e.target.value })}
-            onInput={handleTextareaAutoResize}
-          />
+          {storyBible.synopsis?.trim() ? (
+            <MarkdownPreview content={storyBible.synopsis} />
+          ) : (
+            <textarea
+              className="story-bible-textarea auto-resize"
+              placeholder="In a last‑chance hackathon, a mismatched team must overcome bias and burnout to ship a wild idea..."
+              value={storyBible.synopsis}
+              onChange={(e) => setStoryBible({ ...storyBible, synopsis: e.target.value })}
+              onInput={handleTextareaAutoResize}
+            />
+          )}
         </div>
         <button type="button" className="next-section-btn" onClick={() => scrollToSection('worldbuilding')}>
           Next <span className="next-arrow">↓</span>
@@ -479,13 +495,17 @@ function StoryBiblePanel({
           Bring your world to life with locations, lore, magic systems, technology, and more.
         </p>
         <div className="section-content">
-          <textarea
-            className="story-bible-textarea auto-resize"
-            placeholder="Key locations, factions, rules of magic or technology..."
-            value={storyBible.worldbuilding}
-            onChange={(e) => setStoryBible({ ...storyBible, worldbuilding: e.target.value })}
-            onInput={handleTextareaAutoResize}
-          />
+          {storyBible.worldbuilding?.trim() ? (
+            <MarkdownPreview content={storyBible.worldbuilding} />
+          ) : (
+            <textarea
+              className="story-bible-textarea auto-resize"
+              placeholder="Key locations, factions, rules of magic or technology..."
+              value={storyBible.worldbuilding}
+              onChange={(e) => setStoryBible({ ...storyBible, worldbuilding: e.target.value })}
+              onInput={handleTextareaAutoResize}
+            />
+          )}
           {worldElements.length > 0 && (
             <div className="characters-list" style={{ marginTop: 8 }}>
               {worldElements.map((w) => (
@@ -623,21 +643,31 @@ function StoryBiblePanel({
               <div className="chapter-outline-edit">
                 {!useImportedOutline ? (
                   <div>
-                    <div className="story-bible-field-label">Outline</div>
-                    <textarea
-                      className="story-bible-textarea auto-resize"
-                      placeholder="Chapter breakdowns, major turning points, and endings..."
-                      value={outlineText}
-                      onChange={(e) => {
-                        setOutlineText(e.target.value)
-                        setStoryBible({ ...storyBible, outline: e.target.value })
-                      }}
-                      onInput={handleTextareaAutoResize}
-                    />
+                    {outlineText?.trim() ? (
+                      <MarkdownPreview content={outlineText} />
+                    ) : (
+                      <>
+                        <div className="story-bible-field-label">Outline</div>
+                        <textarea
+                          className="story-bible-textarea auto-resize"
+                          placeholder="Chapter breakdowns, major turning points, and endings..."
+                          value={outlineText}
+                          onChange={(e) => {
+                            setOutlineText(e.target.value)
+                            setStoryBible({ ...storyBible, outline: e.target.value })
+                          }}
+                          onInput={handleTextareaAutoResize}
+                        />
+                      </>
+                    )}
                   </div>
                 ) : (
                   <div>
-                    <textarea className="story-bible-textarea auto-resize" value={importedOutline} readOnly />
+                    {importedOutline?.trim() ? (
+                      <MarkdownPreview content={importedOutline} />
+                    ) : (
+                      <textarea className="story-bible-textarea auto-resize" value={importedOutline} readOnly />
+                    )}
                     {isBibleEditable && (
                       <div style={{ marginTop: 8 }}>
                         <button className="secondary-link-btn" onClick={() => setUseImportedOutline(false)}>
