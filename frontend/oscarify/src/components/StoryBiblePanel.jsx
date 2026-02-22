@@ -60,6 +60,8 @@ function StoryBiblePanel({
   charactersFormRef,
   handleTextareaAutoResize,
 }) {
+  const [chapterCount, setChapterCount] = useState(1)
+
   const sectionRefs = {
     braindump: useRef(null),
     genre: useRef(null),
@@ -270,13 +272,6 @@ function StoryBiblePanel({
               }
             >
               + Add Character
-            </button>
-            <button
-              type="button"
-              className="secondary-pill-btn"
-              onClick={handleGenerateAllCharacters}
-            >
-              Generate All Characters
             </button>
           </div>
         </div>
@@ -529,14 +524,25 @@ function StoryBiblePanel({
             <span className="section-title">Outline &amp; Chapter Details</span>
           </div>
           <div className="section-actions">
-            <button
-              type="button"
-              className="secondary-pill-btn"
-              onClick={handleGenerateChapters}
-              disabled={isGeneratingChapters}
-            >
-              {isGeneratingChapters ? 'Generating...' : 'Generate Chapters'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <input
+                type="number"
+                min="1"
+                max="50"
+                value={chapterCount}
+                onChange={(e) => setChapterCount(Math.max(1, parseInt(e.target.value) || 1))}
+                style={{ width: '56px', padding: '4px 6px', borderRadius: '6px', border: '1px solid var(--border-color, #ccc)', background: 'var(--input-bg, #fff)', color: 'var(--text-color, #000)', fontSize: '13px' }}
+                title="Number of chapters to generate"
+              />
+              <button
+                type="button"
+                className="secondary-pill-btn"
+                onClick={() => handleGenerateChapters(chapterCount)}
+                disabled={isGeneratingChapters}
+              >
+                {isGeneratingChapters ? 'Generating...' : 'Generate Chapters'}
+              </button>
+            </div>
             <button
               type="button"
               className="secondary-pill-btn"
