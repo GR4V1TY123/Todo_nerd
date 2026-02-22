@@ -1,4 +1,5 @@
 import { Link, useNavigate } from 'react-router-dom'
+import { setUsername, setPassword } from '../globals'
 
 function LoginPage() {
   const navigate = useNavigate()
@@ -56,9 +57,17 @@ function LoginPage() {
 
         <form className="login-form" onSubmit={handleEmailSubmit}>
           <input 
-            type="email" 
+            type="text" 
             className="login-input" 
-            placeholder="Enter your email"
+            placeholder="Username"
+            onChange={(e) => setUsername(e.target.value)}
+            required
+          />
+          <input 
+            type="password" 
+            className="login-input" 
+            placeholder="Password"
+            onChange={(e) => setPassword(e.target.value)}
             required
           />
           <button type="submit" className="login-submit">

@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom'
 import { useState, useRef, useEffect } from 'react'
 import StoryBiblePanel from '../components/StoryBiblePanel'
+import { username, password } from '../globals'
 
 function EditorPage() {
   const { projectId } = useParams()
@@ -44,13 +45,41 @@ function EditorPage() {
 
   const editorRef = useRef(null)
   const charactersFormRef = useRef(null)
+  const hacksFetchedRef = useRef(false)
+
+  // Fetch hacks data on mount
+  useEffect(() => {
+    if (hacksFetchedRef.current) return
+    hacksFetchedRef.current = true
+    const fetchHacksData = async () => {
+      try {
+        const res = await fetch('http://164.52.218.116/hacks/get_data', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            login_id: username,
+            password: password,
+            mode: 'web',
+          }),
+        })
+        const data = await res.json()
+        const botText = data.result
+          ? `${data.summary}\n\nDo you want to integrate these ideas?`
+          : data.summary
+        setChatMessages(prev => [...prev, { id: Date.now(), sender: 'assistant', type: 'hacks', result: data.result, text: botText }])
+      } catch (err) {
+        console.error('Failed to fetch hacks data:', err)
+      }
+    }
+    fetchHacksData()
+  }, [])
   const [isChatCollapsed, setIsChatCollapsed] = useState(false)
   const [activeTab, setActiveTab] = useState('chat')
   const [chatMessages, setChatMessages] = useState([
     { id: 1, sender: 'assistant', text: 'How can I help?' }
   ])
   const [consistencyToast, setConsistencyToast] = useState({ show: false, message: '' })
-  const [feedbackOverlay, setFeedbackOverlay] = useState({ show: false, json: null })
+  const [feedbackOverlay, setFeedbackOverlay] = useState({ show: false, json: null, loading: false, error: null })
   const [chatInput, setChatInput] = useState('')
   const [chatMode, setChatMode] = useState('💬 Chat mode')
   const chatBodyRef = useRef(null)
@@ -167,87 +196,82 @@ function EditorPage() {
       [selectedChapterId]: currentHtml,
     }
 
+    const parts = []
+
+    // Story Bible fields
+    if (storyBible.braindump) parts.push(`BRAINDUMP:\n${storyBible.braindump}`)
+
+    const genreList = selectedGenres.length > 0 ? selectedGenres.join(', ') : customGenreIdeas
+    if (genreList) parts.push(`GENRE: ${genreList}`)
+
+    const styleText = storyBible.styleNotes || customStyleIdeas
+    if (styleText) parts.push(`STYLE NOTES:\n${styleText}`)
+
+    if (storyBible.synopsis) parts.push(`SYNOPSIS:\n${storyBible.synopsis}`)
+
+    if (charactersList.length > 0) {
+      const charsText = charactersList.map(ch => {
+        const lines = [`Name: ${ch.name || 'Unknown'}`]
+        if (ch.role) lines.push(`Role: ${ch.role}`)
+        if (ch.summary) lines.push(`Summary: ${ch.summary}`)
+        if (ch.personality) lines.push(`Personality: ${ch.personality}`)
+        if (ch.motivations) lines.push(`Motivations: ${ch.motivations}`)
+        if (ch.arc) lines.push(`Arc: ${ch.arc}`)
+        if (ch.strengths) lines.push(`Strengths: ${ch.strengths}`)
+        if (ch.weaknesses) lines.push(`Weaknesses: ${ch.weaknesses}`)
+        if (ch.internalConflict) lines.push(`Internal conflict: ${ch.internalConflict}`)
+        return lines.join(' | ')
+      }).join('\n')
+      parts.push(`CHARACTERS:\n${charsText}`)
+    }
+
+    if (storyBible.worldbuilding) parts.push(`WORLDBUILDING:\n${storyBible.worldbuilding}`)
+
+    const outlineValue = useImportedOutline ? (importedOutline || '') : (outlineText || '')
+    if (outlineValue) parts.push(`OUTLINE:\n${outlineValue}`)
+
+    // All chapter contents
     const chapterBlocks = chapters.map((ch, idx) => {
       const html = mergedContents[ch.id] || ''
       const text = htmlToPlainText(html).trim()
-      return `Chapter ${idx + 1} (${ch.name}):\n${text || '[Empty]'}`
+      return `CHAPTER ${idx + 1} (${ch.name}):\n${text || '[Empty]'}`
     })
+    if (chapterBlocks.length > 0) parts.push(chapterBlocks.join('\n\n'))
 
-    return chapterBlocks.join('\n\n')
+    return parts.join('\n\n---\n\n')
   }
 
   const handleFeedbackClick = async () => {
-    if (!isPro) {
-      alert('Upgrade to Pro to access Feedback.')
+    const input = buildCouncilInput()
+    if (!input.trim()) {
+      alert('Add some story content before requesting feedback.')
       return
     }
 
-    const input = buildCouncilInput()
-    if (!input.trim()) return
+    setFeedbackOverlay({ show: true, json: null, loading: true, error: null })
 
     try {
-      const response = await fetch('http://164.52.213.163/hacks/council', {
+      const response = await fetch('http://164.52.218.116/hacks/council', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input }),
       })
 
-      if (!response.ok) return
+      if (!response.ok) {
+        setFeedbackOverlay({ show: true, json: null, loading: false, error: `Request failed (${response.status})` })
+        return
+      }
 
       const data = await response.json().catch(() => null)
-      if (!data || typeof data !== 'object') return
+      if (!data || typeof data !== 'object') {
+        setFeedbackOverlay({ show: true, json: null, loading: false, error: 'Invalid response from server.' })
+        return
+      }
 
-      const verdict = data.verdict && typeof data.verdict === 'object' ? data.verdict : data
-      const notes = typeof verdict.notes === 'string' ? verdict.notes : ''
-      const checks = Object.entries(verdict)
-        .filter(([, v]) => typeof v === 'boolean')
-        .map(([label, value]) => ({ label: formatLabel(label), value }))
-
-      setFeedbackOverlay({ show: true, json: data, notes, checks })
+      setFeedbackOverlay({ show: true, json: data, loading: false, error: null })
     } catch (error) {
       console.error('Error sending feedback:', error)
-    }
-  }
-
-  const getFeedbackOverlayData = () => {
-    const payload = feedbackOverlay.json
-    if (!payload || typeof payload !== 'object') return null
-
-    const verdict = payload.verdict && typeof payload.verdict === 'object' ? payload.verdict : {}
-    const role = payload.role || verdict.role || 'Response'
-    const notes = typeof verdict.notes === 'string' ? verdict.notes : feedbackOverlay.notes || ''
-    const recommendedModels = Array.isArray(verdict.recommended_models) ? verdict.recommended_models : []
-    const verdictChips = Object.entries(verdict)
-      .filter(([, v]) => typeof v === 'boolean')
-      .map(([label, value]) => ({ label: formatLabel(label), value }))
-
-    const answers = []
-    if (payload.answer && typeof payload.answer === 'object') {
-      Object.entries(payload.answer).forEach(([key, section]) => {
-        if (!section || typeof section !== 'object') return
-        const sectionVerdict = section.verdict && typeof section.verdict === 'object' ? section.verdict : {}
-        const sectionChips = Object.entries(sectionVerdict)
-          .filter(([, v]) => typeof v === 'boolean')
-          .map(([label, value]) => ({ label: formatLabel(label), value }))
-        const analysis = Array.isArray(section.analysis) ? section.analysis : []
-
-        answers.push({
-          key,
-          role: section.role || formatLabel(key),
-          chips: sectionChips,
-          analysis,
-        })
-      })
-    }
-
-    return {
-      role,
-      notes,
-      recommendedModels,
-      verdictChips,
-      answers,
+      setFeedbackOverlay({ show: true, json: null, loading: false, error: 'Failed to connect to feedback service.' })
     }
   }
 
@@ -613,46 +637,69 @@ function EditorPage() {
   }
 
   const handleVoiceInput = () => {
-    if (!recognitionRef.current) {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
-      if (!SpeechRecognition) {
-        alert('Speech Recognition is not supported in your browser. Use Chrome, Edge, or Safari.')
-        return
-      }
-
-      recognitionRef.current = new SpeechRecognition()
-      recognitionRef.current.continuous = false
-      recognitionRef.current.interimResults = false
-      recognitionRef.current.lang = 'en-US'
-
-      recognitionRef.current.onstart = () => {
-        setIsRecording(true)
-      }
-
-      recognitionRef.current.onresult = (event) => {
-        let transcript = ''
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript
-        }
-        setChatInput((prev) => (prev + (prev ? ' ' : '') + transcript).trim())
-      }
-
-      recognitionRef.current.onerror = (event) => {
-        console.error('Speech recognition error:', event.error)
-        alert('Error recording voice: ' + event.error)
-      }
-
-      recognitionRef.current.onend = () => {
-        setIsRecording(false)
-      }
-    }
-
+    // Stop if already recording
     if (isRecording) {
-      recognitionRef.current.stop()
+      if (recognitionRef.current) {
+        recognitionRef.current.stop()
+      }
       setIsRecording(false)
-    } else {
-      recognitionRef.current.start()
+      return
     }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      setChatMessages((prev) => [
+        ...prev,
+        { id: Date.now(), sender: 'assistant', text: '⚠️ Speech recognition is not supported in your browser. Try Chrome or Edge.' },
+      ])
+      return
+    }
+
+    // Always create a fresh instance to avoid InvalidStateError on reuse
+    const recognition = new SpeechRecognition()
+    recognition.continuous = true
+    recognition.interimResults = true
+    recognition.lang = 'en-US'
+
+    recognitionRef.current = recognition
+
+    // Track the stable (final) text accumulated this session
+    let finalTranscript = ''
+
+    recognition.onstart = () => {
+      setIsRecording(true)
+    }
+
+    recognition.onresult = (event) => {
+      let interim = ''
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i]
+        if (result.isFinal) {
+          finalTranscript += result[0].transcript + ' '
+        } else {
+          interim += result[0].transcript
+        }
+      }
+      // Show final + live interim text in the input box
+      setChatInput((prev) => {
+        // Strip any previous interim text and replace with latest
+        const base = finalTranscript
+        return (base + interim).trim()
+      })
+    }
+
+    recognition.onerror = (event) => {
+      if (event.error === 'no-speech') return // silently ignore
+      console.error('Speech recognition error:', event.error)
+      setIsRecording(false)
+    }
+
+    recognition.onend = () => {
+      setIsRecording(false)
+      recognitionRef.current = null
+    }
+
+    recognition.start()
   }
 
   const handleChatAttachment = (type) => {
@@ -1496,14 +1543,6 @@ function EditorPage() {
             </svg>
             AI Helper
           </button>
-          <div className="story-bible-toggle" onClick={() => setStoryBibleEnabled(!storyBibleEnabled)}>
-            <svg className="story-bible-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
-              <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
-            </svg>
-            <span className="story-bible-label">Story Bible</span>
-            <div className={`toggle-switch ${storyBibleEnabled ? '' : 'off'}`}></div>
-          </div>
           <div className="sidebar-trash" onClick={handleTrashClick}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <polyline points="3 6 5 6 21 6" />
@@ -1546,17 +1585,16 @@ function EditorPage() {
           </button>
 
           <button
-            className={`toolbar-btn ${!isPro ? 'toolbar-btn-disabled' : ''}`}
+            className="toolbar-btn"
             onMouseDown={(e) => e.preventDefault()}
             onClick={handleFeedbackClick}
-            title={!isPro ? 'Pro feature - Upgrade to unlock' : 'Get feedback on your writing'}
+            title="Get feedback on your writing"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
             Feedback
-            {!isPro && <span className="pro-badge">PRO</span>}
           </button>
 
           <div style={{ marginLeft: 'auto' }}>
@@ -1785,7 +1823,7 @@ function EditorPage() {
             <div className="chat-messages">
               {chatMessages.map((msg) => (
                 <div key={msg.id} className={`chat-message ${msg.sender}`}>
-                  <div className="chat-message-bubble">
+                  <div className={`chat-message-bubble${msg.type === 'hacks' ? ' hacks-bubble' : ''}`}>
                     {(msg.type === 'consistency') ? (
                       <div className="consistency-message">
                         <button
@@ -1814,6 +1852,8 @@ function EditorPage() {
                           </div>
                         )}
                       </div>
+                    ) : msg.type === 'hacks' ? (
+                      msg.text
                     ) : msg.type === 'summary' ? (
                       <div className="summary-message">
                         <div className="summary-title">Story summary</div>
@@ -1923,141 +1963,345 @@ function EditorPage() {
         </div>
       )}
 
-      {/* Feedback JSON Overlay */}
-      {feedbackOverlay.show && (() => {
-        const data = getFeedbackOverlayData()
-        if (!data) return null
-        const director = data.answers.find((ans) => ans.role.toLowerCase() === 'director')
-        const audienceAnswers = data.answers.filter((ans) => ans.role.toLowerCase() !== 'director')
-        const directorIssues = director?.analysis?.flatMap((item) =>
-          Array.isArray(item.issues)
-            ? item.issues.map((issue) => ({
-              section: issue.section || item.section || 'Issue',
-              text: issue.problem || issue.description || '',
-            }))
-            : []
-        ) || []
-        return (
-          <div className="feedback-overlay">
-            <div className="feedback-card">
-              <div className="feedback-card-header">
-                <span>Feedback Response</span>
-                <button
-                  className="feedback-close"
-                  aria-label="Close feedback"
-                  onClick={() => setFeedbackOverlay({ show: false, json: null })}
-                >
-                  ×
-                </button>
+      {/* Feedback Report Overlay */}
+      {feedbackOverlay.show && (
+        <div
+          className="feedback-overlay"
+          onClick={(e) => { if (e.target === e.currentTarget) setFeedbackOverlay({ show: false, json: null, loading: false, error: null }) }}
+        >
+          <div className="feedback-card">
+
+            {/* ── Premium Header ── */}
+            <div className="feedback-card-header">
+              <div className="fch-left">
+                <svg className="fch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8">
+                  <path d="M12 2l2.09 6.26L20 9l-5 3.64L16.18 19 12 15.9 7.82 19 9 12.64 4 9l5.91-.74L12 2z"/>
+                </svg>
+                <div>
+                  <div className="fch-title">Multiagent Agentic AI Council Report</div>
+                  <div className="fch-sub">Powered by oscarify AI</div>
+                </div>
               </div>
+              <button className="feedback-close" aria-label="Close feedback"
+                onClick={() => setFeedbackOverlay({ show: false, json: null, loading: false, error: null })}>✕</button>
+            </div>
+
+            {/* ── Loading ── */}
+            {feedbackOverlay.loading && (
+              <div className="feedback-loading">
+                <div className="fb-orbit">
+                  <div className="fb-orbit-ring"></div>
+                  <div className="fb-orbit-core"></div>
+                </div>
+                <p className="fb-loading-text">Analysing your story…</p>
+                <p className="fb-loading-sub">Reading characters · Checking structure · Scoring chapters</p>
+              </div>
+            )}
+
+            {/* ── Error ── */}
+            {feedbackOverlay.error && !feedbackOverlay.loading && (
               <div className="feedback-body">
-                <div className="feedback-meta">
-                  <div className="feedback-meta-row">
-                    <span className="meta-label">Role</span>
-                    <span className="meta-value">{data.role}</span>
-                  </div>
-                  {data.recommendedModels.length > 0 && (
-                    <div className="feedback-meta-row">
-                      <span className="meta-label">Recommended Models</span>
-                      <span className="meta-value">{data.recommendedModels.join(', ')}</span>
-                    </div>
-                  )}
-                </div>
+                <div className="feedback-error">{feedbackOverlay.error}</div>
+              </div>
+            )}
 
-                <div className="feedback-section">
-                  <div className="feedback-section-title">Verdict (at a glance)</div>
-                  <p className="feedback-notes">Scan key risks in 5 seconds.</p>
-                  {data.verdictChips.length > 0 && (
-                    <div className="feedback-chips">
-                      {data.verdictChips.map((chip, idx) => (
-                        <span key={idx} className={`feedback-chip ${chip.value ? 'true' : 'false'}`}>
-                          {chip.label}: {chip.value ? 'True' : 'False'}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {data.notes && <p className="feedback-notes">{data.notes}</p>}
-                </div>
+            {/* ── Report ── */}
+            {feedbackOverlay.json && !feedbackOverlay.loading && (() => {
+              const raw = feedbackOverlay.json
+              const verdict = (raw.verdict && typeof raw.verdict === 'object') ? raw.verdict : {}
+              const boolEntries = Object.entries(verdict).filter(([k, v]) => typeof v === 'boolean' && k !== 'revival_suggestion')
+              const passingCount = boolEntries.filter(([, v]) => !v).length
+              const healthScore = boolEntries.length > 0 ? Math.round((passingCount / boolEntries.length) * 100) : null
+              const riskFlags = Array.isArray(verdict.risk_flags) ? verdict.risk_flags : []
+              const recommended = Array.isArray(verdict.recommended_models) ? verdict.recommended_models : []
+              const notes = verdict.notes || ''
+              const revivalNote = verdict.revival_note || ''
+              const revivalSuggestion = verdict.revival_suggestion
 
-                {director && (
-                  <div className="feedback-section">
-                    <div className="feedback-section-title">Director — fix structure first</div>
-                    <p className="feedback-notes">Resolve structural blockers before polishing prose.</p>
-                    {director.chips && director.chips.length > 0 && (
-                      <div className="feedback-chips">
-                        {director.chips.map((chip, cIdx) => (
-                          <span key={cIdx} className={`feedback-chip ${chip.value ? 'true' : 'false'}`}>
-                            {chip.label}: {chip.value ? 'True' : 'False'}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {directorIssues.length > 0 && (
-                      <div className="feedback-analysis">
-                        <div className="feedback-analysis-card">
-                          <div className="analysis-label">Issues to resolve</div>
-                          <ul className="analysis-list">
-                            {directorIssues.map((issue, iIdx) => (
-                              <li key={iIdx}>
-                                {issue.section ? `${issue.section}: ` : ''}{issue.text}
-                              </li>
-                            ))}
-                          </ul>
+              const director = raw.answer?.director
+              const directorVerdict = (director?.verdict && typeof director.verdict === 'object') ? director.verdict : {}
+              const directorBoolEntries = Object.entries(directorVerdict).filter(([, v]) => typeof v === 'boolean')
+              const directorIssues = Array.isArray(directorVerdict.issues) ? directorVerdict.issues : []
+
+              const audience = raw.answer?.audience
+              const audienceAnalysis = Array.isArray(audience?.analysis) ? audience.analysis : []
+
+              // SVG circular gauge helpers
+              const GAUGE_R = 44
+              const GAUGE_C = 2 * Math.PI * GAUGE_R
+              const gaugeColor = healthScore >= 80 ? '#22c55e' : healthScore >= 50 ? '#f59e0b' : '#ef4444'
+              const gaugeDash = healthScore !== null ? (healthScore / 100) * GAUGE_C : 0
+
+              const sections = [
+                { id: 'verdict', label: 'Verdict' },
+                ...(director ? [{ id: 'director', label: 'Structure' }] : []),
+                ...(audienceAnalysis.length > 0 ? [{ id: 'audience', label: 'Audience' }] : []),
+              ]
+
+              return (
+                <div className="feedback-two-pane">
+
+                  {/* ── Left nav sidebar ── */}
+                  <nav className="feedback-nav">
+                    <div className="fn-label">SECTIONS</div>
+                    {sections.map(s => (
+                      <a key={s.id} href={`#fb-${s.id}`} className="fn-item">{s.label}</a>
+                    ))}
+                    {healthScore !== null && (
+                      <div className="fn-gauge-wrap">
+                        <svg viewBox="0 0 100 100" className="fn-gauge-svg">
+                          <circle cx="50" cy="50" r={GAUGE_R} fill="none" stroke="#DDD7F0" strokeWidth="10"/>
+                          <circle cx="50" cy="50" r={GAUGE_R} fill="none"
+                            stroke={gaugeColor} strokeWidth="10"
+                            strokeDasharray={`${gaugeDash} ${GAUGE_C}`}
+                            strokeDashoffset={GAUGE_C * 0.25}
+                            strokeLinecap="round"
+                            style={{ transition: 'stroke-dasharray 1s ease' }}
+                          />
+                          <text x="50" y="46" textAnchor="middle" fill="#1A0A30" fontSize="18" fontWeight="800">{healthScore}</text>
+                          <text x="50" y="60" textAnchor="middle" fill="#8878B8" fontSize="9">HEALTH</text>
+                        </svg>
+                        <div className="fn-gauge-label" style={{ color: gaugeColor }}>
+                          {healthScore >= 80 ? 'Strong' : healthScore >= 50 ? 'Needs work' : 'Critical'}
                         </div>
                       </div>
                     )}
-                  </div>
-                )}
+                  </nav>
 
-                {audienceAnswers.length > 0 && (
-                  <div className="feedback-section">
-                    <div className="feedback-section-title">Audience — reader reactions</div>
-                    <p className="feedback-notes">Trace how each chapter lands with readers.</p>
-                    <div className="feedback-analysis">
-                      {audienceAnswers.flatMap((ans, idx) => (
-                        ans.analysis?.map((item, aIdx) => (
-                          <div key={`${idx}-${aIdx}`} className="feedback-analysis-card">
-                            {item.section && <div className="analysis-section">{item.section}</div>}
-                            {Array.isArray(item.why_users_like_it) && item.why_users_like_it.length > 0 && (
-                              <div className="analysis-block">
-                                <div className="analysis-label">Why readers like it</div>
-                                <ul>
-                                  {item.why_users_like_it.map((entry, eIdx) => (
-                                    <li key={eIdx}>{entry}</li>
-                                  ))}
-                                </ul>
+                  {/* ── Main scrollable content ── */}
+                  <div className="feedback-main-scroll">
+
+                    {/* ── Verdict section ── */}
+                    <section id="fb-verdict" className="fb-section">
+                      <div className="fb-section-heading">
+                        <span className="fb-section-icon verdict-icon">📋</span>
+                        <div>
+                          <div className="fb-section-title">Editor Verdict</div>
+                          <div className="fb-section-sub">Automated checks across your story's key quality dimensions</div>
+                        </div>
+                        <span className="feedback-role-badge editor-badge">{(raw.role || 'editor').toUpperCase()}</span>
+                      </div>
+
+                      {/* Health bars */}
+                      {boolEntries.length > 0 && (
+                        <div className="fb-health-bars">
+                          {boolEntries.map(([label, value], idx) => (
+                            <div key={idx} className="fb-health-row">
+                              <span className="fb-health-label">{formatLabel(label)}</span>
+                              <div className="fb-health-track">
+                                <div
+                                  className={`fb-health-fill ${value ? 'hf-fail' : 'hf-pass'}`}
+                                  style={{ width: value ? '100%' : '0%' }}
+                                />
                               </div>
-                            )}
-                            {Array.isArray(item.why_users_dislike_it) && item.why_users_dislike_it.length > 0 && (
-                              <div className="analysis-block">
-                                <div className="analysis-label">Why readers dislike it</div>
-                                <ul>
-                                  {item.why_users_dislike_it.map((entry, eIdx) => (
-                                    <li key={eIdx}>{entry}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            )}
-                            {item.net_effect && (
-                              <div className="analysis-block">
-                                <div className="analysis-label">Net effect</div>
-                                <p>{item.net_effect}</p>
-                              </div>
-                            )}
-                            {typeof item.confidence !== 'undefined' && (
-                              <div className="analysis-block confidence">Confidence: {item.confidence}</div>
+                              <span className={`fb-health-status ${value ? 'hs-fail' : 'hs-pass'}`}>
+                                {value ? '⚠ Issue' : '✓ Clear'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {notes && (
+                        <div className="fb-notes-block">
+                          <div className="fb-notes-icon">💬</div>
+                          <p className="fb-notes-text">{notes}</p>
+                        </div>
+                      )}
+
+                      {(revivalSuggestion !== undefined || revivalNote) && (
+                        <div className="fb-revival-block">
+                          <div className="fb-revival-header">
+                            <span className="fb-revival-icon">🔁</span>
+                            <div className="fb-revival-title">Revival Suggestion</div>
+                            {revivalSuggestion !== undefined && (
+                              <span className={`fb-revival-chip ${revivalSuggestion ? 'revival-chip-warn' : 'revival-chip-ok'}`}>
+                                {revivalSuggestion ? '⚠ Review Needed' : '✓ Clear'}
+                              </span>
                             )}
                           </div>
-                        )) || []
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+                          {revivalNote && <p className="fb-revival-note">{revivalNote}</p>}
+                        </div>
+                      )}
+
+                      {/* Risk flags */}
+                      {riskFlags.length > 0 && (
+                        <div className="fb-risk-wrap">
+                          <div className="fb-subsection-label">Risk Flags</div>
+                          <div className="fb-risk-grid">
+                            {riskFlags.map((flag, idx) => (
+                              <div key={idx} className={`fb-risk-card sev-card-${flag.severity || 'medium'}`}>
+                                <div className={`fb-risk-sev sev-dot-${flag.severity || 'medium'}`}></div>
+                                <div className="fb-risk-body">
+                                  <div className="fb-risk-section">{flag.section}</div>
+                                  <div className="fb-risk-type">{formatLabel(flag.risk_type || '')}</div>
+                                </div>
+                                <span className={`fb-risk-pill sev-pill-${flag.severity || 'medium'}`}>{flag.severity || 'medium'}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {recommended.length > 0 && (
+                        <div className="fb-recommended">
+                          <span className="fb-recommended-label">Further analysis:</span>
+                          {recommended.map((m, idx) => (
+                            <span key={idx} className="fb-recommended-badge">{m}</span>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+
+                    {/* ── Director section ── */}
+                    {director && (
+                      <section id="fb-director" className="fb-section">
+                        <div className="fb-section-heading">
+                          <span className="fb-section-icon director-icon">🎬</span>
+                          <div>
+                            <div className="fb-section-title">Structural Analysis</div>
+                            <div className="fb-section-sub">Narrative flow, context drift, and structural integrity</div>
+                          </div>
+                          <span className="feedback-role-badge director-badge">DIRECTOR</span>
+                        </div>
+
+                        {directorBoolEntries.length > 0 && (
+                          <div className="fb-health-bars">
+                            {directorBoolEntries.map(([label, value], idx) => (
+                              <div key={idx} className="fb-health-row">
+                                <span className="fb-health-label">{formatLabel(label)}</span>
+                                <div className="fb-health-track">
+                                  <div className={`fb-health-fill ${value ? 'hf-pass' : 'hf-fail'}`}
+                                    style={{ width: value ? '100%' : '0%' }} />
+                                </div>
+                                <span className={`fb-health-status ${value ? 'hs-pass' : 'hs-fail'}`}>
+                                  {value ? '✓ Yes' : '✗ No'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
+                        {directorIssues.length > 0 && (
+                          <div className="fb-issues-list">
+                            <div className="fb-subsection-label">Issues to Resolve</div>
+                            {directorIssues.map((issue, idx) => (
+                              <div key={idx} className="fb-issue-card">
+                                <div className="fb-issue-num">{idx + 1}</div>
+                                <div className="fb-issue-body">
+                                  <div className="fb-issue-section">{issue.section}</div>
+                                  <div className="fb-issue-problem">{issue.problem}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </section>
+                    )}
+
+                    {/* ── Audience section ── */}
+                    {audienceAnalysis.length > 0 && (
+                      <section id="fb-audience" className="fb-section">
+                        <div className="fb-section-heading">
+                          <span className="fb-section-icon audience-icon">👥</span>
+                          <div>
+                            <div className="fb-section-title">Reader Reactions</div>
+                            <div className="fb-section-sub">How readers experience each chapter</div>
+                          </div>
+                          <span className="feedback-role-badge audience-badge">AUDIENCE</span>
+                        </div>
+
+                        {audienceAnalysis.map((item, idx) => {
+                          const likes = Array.isArray(item.why_users_like_it) ? item.why_users_like_it : []
+                          const dislikes = Array.isArray(item.why_users_dislike_it) ? item.why_users_dislike_it : []
+                          const total = likes.length + dislikes.length
+                          const likePct = total > 0 ? Math.round((likes.length / total) * 100) : 50
+                          const conf = typeof item.confidence !== 'undefined' ? Math.round(item.confidence * 100) : null
+                          const confC = 2 * Math.PI * 28
+                          const confDash = conf !== null ? (conf / 100) * confC : 0
+                          const confColor = conf >= 70 ? '#22c55e' : conf >= 40 ? '#f59e0b' : '#ef4444'
+
+                          return (
+                            <div key={idx} className="fb-audience-card">
+                              {item.section && (
+                                <div className="fb-audience-header">
+                                  <div className="fb-audience-title">{item.section}</div>
+                                  {conf !== null && (
+                                    <div className="fb-conf-ring">
+                                      <svg viewBox="0 0 72 72" width="60" height="60">
+                                        <circle cx="36" cy="36" r="28" fill="none" stroke="#DDD7F0" strokeWidth="7"/>
+                                        <circle cx="36" cy="36" r="28" fill="none"
+                                          stroke={confColor} strokeWidth="7"
+                                          strokeDasharray={`${confDash} ${confC}`}
+                                          strokeDashoffset={confC * 0.25}
+                                          strokeLinecap="round"/>
+                                        <text x="36" y="40" textAnchor="middle" fill="#1A0A30" fontSize="13" fontWeight="800">{conf}%</text>
+                                      </svg>
+                                      <div className="fb-conf-label">confidence</div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Sentiment bar chart */}
+                              {total > 0 && (
+                                <div className="fb-sentiment-bar-wrap">
+                                  <div className="fb-sentiment-bar">
+                                    <div className="fb-sent-like" style={{ width: `${likePct}%` }}>
+                                      {likePct > 15 && <span>👍 {likePct}%</span>}
+                                    </div>
+                                    <div className="fb-sent-dislike" style={{ width: `${100 - likePct}%` }}>
+                                      {(100 - likePct) > 15 && <span>👎 {100 - likePct}%</span>}
+                                    </div>
+                                  </div>
+                                  <div className="fb-sent-legend">
+                                    <span className="fsl-like">● {likes.length} positive signals</span>
+                                    <span className="fsl-dislike">● {dislikes.length} negative signals</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="fb-audience-grid">
+                                {likes.length > 0 && (
+                                  <div className="fb-aud-col fb-aud-like">
+                                    <div className="fb-aud-col-title">
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                                      What works
+                                    </div>
+                                    <ul>{likes.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                                  </div>
+                                )}
+                                {dislikes.length > 0 && (
+                                  <div className="fb-aud-col fb-aud-dislike">
+                                    <div className="fb-aud-col-title">
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                                      What doesn't work
+                                    </div>
+                                    <ul>{dislikes.map((t, i) => <li key={i}>{t}</li>)}</ul>
+                                  </div>
+                                )}
+                              </div>
+
+                              {item.net_effect && (
+                                <div className="fb-net-effect">
+                                  <span className="fb-net-label">Net Effect</span>
+                                  <p>{item.net_effect}</p>
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </section>
+                    )}
+
+                  </div>{/* end feedback-main-scroll */}
+                </div>
+              )
+            })()}
+
           </div>
-        )
-      })()}
+        </div>
+      )}
 
       {/* Pro Activation Toast */}
       {showProToast && (
