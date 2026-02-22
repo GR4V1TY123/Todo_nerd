@@ -36,6 +36,7 @@ function EditorPage() {
   const [isPro, setIsPro] = useState(false)
   const [showProToast, setShowProToast] = useState(false)
   const [showSyncToast, setShowSyncToast] = useState(false)
+  const [chapterImage, setChapterImage] = useState({ loading: false, imageUrl: null, error: null })
   const [currentIntentId, setCurrentIntentId] = useState(null)
   const [chapters, setChapters] = useState([
     { id: 1, name: 'Chapter 1' }
@@ -567,19 +568,69 @@ function EditorPage() {
     const userQuery = chatInput.trim()
 
     // Fire chapter summary sync and chapter validation in the background (non-blocking)
-    syncChapterSummary()
-    validateCurrentChapter()
+    // syncChapterSummary()
+    // validateCurrentChapter()
 
     // Add user message to chat
+    const userMsgId = Date.now()
     setChatMessages((prev) => [
       ...prev,
-      {
-        id: Date.now(),
-        sender: 'user',
-        text: userQuery,
-      },
+      { id: userMsgId, sender: 'user', text: userQuery },
     ])
     setChatInput('')
+
+    // Build context: synopsis + all chapter text + user query
+    const currentHtml = editorRef.current ? editorRef.current.innerHTML : ''
+    const mergedContents = { ...chapterContents, [selectedChapterId]: currentHtml }
+
+    const parts = []
+    if (storyBible.synopsis) parts.push(`Synopsis: ${storyBible.synopsis}`)
+
+    chapters.forEach((ch, idx) => {
+      const text = htmlToPlainText(mergedContents[ch.id] || '').trim()
+      if (text) parts.push(`Chapter ${idx + 1} (${ch.name}):\n${text}`)
+    })
+
+    parts.push(`User: ${userQuery}`)
+
+    const contextText = parts.join('\n\n')
+
+    // Add a loading placeholder
+    const loadingId = Date.now() + 1
+    setChatMessages((prev) => [
+      ...prev,
+      { id: loadingId, sender: 'assistant', type: 'loading', text: '...' },
+    ])
+
+    try {
+      const res = await fetch('http://164.52.218.116/hacks/chatbot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: contextText }),
+      })
+
+      const data = await res.json().catch(() => null)
+      const reply =
+        data?.response?.answer || data?.response || data?.reply || data?.text || data?.message ||
+        (typeof data === 'string' ? data : 'No response received.')
+
+      setChatMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === loadingId
+            ? { ...msg, type: undefined, text: reply }
+            : msg
+        )
+      )
+    } catch (err) {
+      console.error('chatbot error:', err)
+      setChatMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === loadingId
+            ? { ...msg, type: undefined, text: 'Failed to reach the chatbot. Please try again.' }
+            : msg
+        )
+      )
+    }
   }
 
   const handleDismissConsistencyMessage = (id) => {
@@ -842,6 +893,27 @@ function EditorPage() {
     setCharactersList(charactersList.filter(ch => ch.id !== id))
   }
 
+  const handleGenerateImage = async () => {
+    const prompt = editorRef.current ? htmlToPlainText(editorRef.current.innerHTML).trim() : ''
+    if (!prompt) return
+    if (chapterImage.imageUrl) URL.revokeObjectURL(chapterImage.imageUrl)
+    setChapterImage({ loading: true, imageUrl: null, error: null })
+    try {
+      const res = await fetch('http://164.52.218.116/hacks/image', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      })
+      if (!res.ok) throw new Error(`Request failed: ${res.status}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      setChapterImage({ loading: false, imageUrl: url, error: null })
+    } catch (err) {
+      console.error('image gen error:', err)
+      setChapterImage({ loading: false, imageUrl: null, error: err.message })
+    }
+  }
+
   const buildStoryRequestBody = (outlineValue) => {
     const primaryGenre = selectedGenres[0] || customGenreIdeas || ''
     const secondaryGenre = selectedGenres[1] || ''
@@ -958,12 +1030,12 @@ function EditorPage() {
         //   return
         // }
 
-        // consistent === true → call insert-chapter
-        const synopsis = storyBible.synopsis ? `Synopsis: ${storyBible.synopsis}\n\n` : ''
+        // On bible save — insert only the synopsis
+        if (!storyBible.synopsis?.trim()) return
         const insertRes = await fetch('http://164.52.218.116/hacks/insert-chapter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: `${synopsis}${text}` }),
+          body: JSON.stringify({ text: storyBible.synopsis.trim() }),
         })
         if (!insertRes.ok) {
           console.warn('insert-chapter request failed:', insertRes.status)
@@ -1242,7 +1314,8 @@ function EditorPage() {
         style: styleString,
         characters: characterNames
       }
-
+      console.log(requestBody);
+      
       const response = await fetch('http://164.52.218.116/hacks/synopsis', {
         method: 'POST',
         headers: {
@@ -1325,11 +1398,12 @@ function EditorPage() {
         : customGenreIdeas || 'General Fiction'
 
       const styleString = storyBible.styleNotes || customStyleIdeas || 'Standard narrative'
-
+      const characterNames = charactersList.map((ch) => ch.name).filter(Boolean)
       const requestBody = {
         dump: storyBible.braindump || 'No braindump provided',
         genre: genreString,
         style: styleString,
+        characters: characterNames,
         synopsis: storyBible.synopsis || 'No synopsis provided',
         worldbuilding: storyBible.worldbuilding || 'No worldbuilding provided',
         chapternumber: count || chapters.length || 1
@@ -1732,20 +1806,16 @@ function EditorPage() {
               </button>
               <button
                 className="format-btn"
-                title="Image"
+                title="Generate image from chapter"
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => {
-                  const url = window.prompt('Enter image URL')
-                  if (url) handleToolbarCommand('insertImage', url)
-                }}
+                onClick={handleGenerateImage}
               >
                 🖼
               </button>
             </div>
 
             {/* Editor Body */}
-            <div className={`editor-body ${isTransitioning ? 'transitioning' : ''
-              }`}>
+            <div className={`editor-body ${isTransitioning ? 'transitioning' : ''}`}>
               <div
                 ref={editorRef}
                 className="editor-textarea"
@@ -1756,6 +1826,30 @@ function EditorPage() {
                 suppressContentEditableWarning={true}
               />
             </div>
+
+            {/* Inline chapter image */}
+            {(chapterImage.loading || chapterImage.imageUrl || chapterImage.error) && (
+              <div className="chapter-image-strip">
+                {chapterImage.loading && (
+                  <div className="chapter-image-loading">
+                    <span className="image-gen-spinner large" />
+                    <span>Generating image…</span>
+                  </div>
+                )}
+                {chapterImage.error && !chapterImage.loading && (
+                  <div className="image-gen-error" style={{ margin: '8px 0' }}>{chapterImage.error}</div>
+                )}
+                {chapterImage.imageUrl && !chapterImage.loading && (
+                  <div className="chapter-image-wrap">
+                    <img src={chapterImage.imageUrl} alt="Chapter illustration" className="chapter-image" />
+                    <div className="chapter-image-actions">
+                      <a href={chapterImage.imageUrl} download="chapter-image.png" target="_blank" rel="noreferrer" className="image-gen-download-btn">↓ Download</a>
+                      <button className="chapter-image-dismiss" onClick={() => { URL.revokeObjectURL(chapterImage.imageUrl); setChapterImage({ loading: false, imageUrl: null, error: null }) }}>✕ Remove</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Quick Actions */}
             <div className="editor-quick-actions">
@@ -1923,10 +2017,16 @@ function EditorPage() {
                           })}
                         </div>
                       </div>
+                    ) : msg.type === 'loading' ? (
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center', padding: '4px 2px' }}>
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor', opacity: 0.4, animation: 'pulse 1s infinite' }} />
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor', opacity: 0.4, animation: 'pulse 1s 0.2s infinite' }} />
+                        <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'currentColor', opacity: 0.4, animation: 'pulse 1s 0.4s infinite' }} />
+                      </div>
                     ) : (
                       msg.text
                     )}
-                    {msg.sender === 'assistant' && msg.text && (
+                    {msg.sender === 'assistant' && msg.text && msg.type !== 'loading' && (
                       <button
                         className={`tts-btn${speakingMsgId === msg.id ? ' speaking' : ''}`}
                         onClick={() => handleTTS(msg.text, msg.id)}
@@ -1958,6 +2058,13 @@ function EditorPage() {
               }}
             />
             <div className="chat-input-icons">
+              <button
+                className={`chat-input-icon ${isRecording ? 'recording' : ''}`}
+                onClick={handleVoiceInput}
+                title={isRecording ? 'Stop recording' : 'Start voice input'}
+              >
+                {isRecording ? '⏹' : '🎤'}
+              </button>
               <button
                 className={`chat-input-icon ${isSpeaking ? 'speaking' : ''}`}
                 onClick={() => handleTTS()}

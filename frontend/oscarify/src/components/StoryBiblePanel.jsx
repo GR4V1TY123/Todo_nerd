@@ -62,6 +62,23 @@ function StoryBiblePanel({
 }) {
   const [chapterCount, setChapterCount] = useState(1)
 
+  const handleSave = async () => {
+    if (storyBible.synopsis?.trim()) {
+      console.log("save bible hit");
+      
+      try {
+        await fetch('http://164.52.218.116/hacks/insert-chapter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: storyBible.synopsis }),
+        })
+      } catch (err) {
+        console.error('insert-chapter (bible save) error:', err)
+      }
+    }
+    onSave()
+  }
+
   const sectionRefs = {
     braindump: useRef(null),
     genre: useRef(null),
@@ -125,7 +142,7 @@ function StoryBiblePanel({
           <button
             type="button"
             className="story-bible-action-btn save"
-            onClick={onSave}
+            onClick={handleSave}
             title="Save Story Bible and go to write mode"
           >
             Save
@@ -694,7 +711,7 @@ function StoryBiblePanel({
         <button
           type="button"
           className="story-bible-save-btn"
-          onClick={onSave}
+          onClick={handleSave}
           title="Save all story details and go to writing interface"
         >
           💾 Save &amp; Continue to Writing
