@@ -1656,6 +1656,17 @@ function EditorPage() {
         </div>
 
         <div className="sidebar-footer">
+          <button
+            className="sidebar-action-btn"
+            onClick={fetchSuggestions}
+            title="Get writing suggestions"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M12 2a7 7 0 0 1 7 7c0 2.5-1.3 4.7-3.3 6l-.7 3H9l-.7-3A7 7 0 0 1 12 2z" />
+              <path d="M9 21h6" />
+            </svg>
+            Suggest
+          </button>
         </div>
       </aside>
 

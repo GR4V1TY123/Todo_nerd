@@ -1,5 +1,6 @@
 ﻿import { useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
+import { username, password } from '../globals'
 
 function StoryBiblePanel({
   storyBible,
@@ -65,8 +66,19 @@ function StoryBiblePanel({
   const handleSave = async () => {
     if (storyBible.synopsis?.trim()) {
       console.log("save bible hit");
+      console.log(storyBible.synopsis);
       
       try {
+        await fetch('http://164.52.218.116/hacks/nativesummary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            login_id: username,
+            password: password,
+            summary: storyBible.synopsis,
+            mode: 'web',
+          }),
+        })
         await fetch('http://164.52.218.116/hacks/insert-chapter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
