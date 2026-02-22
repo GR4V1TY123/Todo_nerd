@@ -58,7 +58,7 @@ function EditorPage() {
     hacksFetchedRef.current = true
     const fetchHacksData = async () => {
       try {
-        const res = await fetch('http://164.52.218.116/hacks/get_data', {
+        const res = await fetch('https://164.52.218.116/hacks/get_data', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -206,7 +206,7 @@ function EditorPage() {
     setFeedbackOverlay({ show: true, json: null, loading: true, error: null })
 
     try {
-      const response = await fetch('http://164.52.218.116/hacks/council', {
+      const response = await fetch('https://164.52.218.116/hacks/council', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input }),
@@ -417,7 +417,7 @@ function EditorPage() {
       if (!chaptersText) return
 
       // Step 1 — summarize
-      const summarizeRes = await fetch('http://164.52.218.116/hacks/summarize', {
+      const summarizeRes = await fetch('https://164.52.218.116/hacks/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ chapters: chaptersText }),
@@ -437,7 +437,7 @@ function EditorPage() {
       }
 
       // Step 2 — push to nativesummary
-      const nativeRes = await fetch('http://164.52.218.116/hacks/nativesummary', {
+      const nativeRes = await fetch('https://164.52.218.116/hacks/nativesummary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -466,7 +466,7 @@ function EditorPage() {
       const text = htmlToPlainText(currentHtml).trim()
       if (!text) return
 
-      const validateRes = await fetch('http://164.52.218.116/hacks/verify', {
+      const validateRes = await fetch('https://164.52.218.116/hacks/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input: text }),
@@ -507,7 +507,7 @@ function EditorPage() {
       const text = htmlToPlainText(currentHtml).trim()
       if (!text) return
 
-      const res = await fetch('http://164.52.218.116/hacks/suggest', {
+      const res = await fetch('https://164.52.218.116/hacks/suggest', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ input: text }),
@@ -603,7 +603,7 @@ function EditorPage() {
     ])
 
     try {
-      const res = await fetch('http://164.52.218.116/hacks/chatbot', {
+      const res = await fetch('https://164.52.218.116/hacks/chatbot', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text: contextText }),
@@ -740,7 +740,7 @@ function EditorPage() {
       setIsSpeaking(true)
       setSpeakingMsgId(msgId)
 
-      const res = await fetch('http://164.52.218.116/hacks/tts', {
+      const res = await fetch('https://164.52.218.116/hacks/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
@@ -794,7 +794,7 @@ function EditorPage() {
     if (upgradeButtonText === 'Upgrade') {
       try {
         // Call payment-intents API (POST) to create payment intent and get payment URL
-        const response = await fetch('http://164.52.213.163/hacks/payment-intents', {
+        const response = await fetch('https://164.52.213.163/hacks/payment-intents', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -899,7 +899,7 @@ function EditorPage() {
     if (chapterImage.imageUrl) URL.revokeObjectURL(chapterImage.imageUrl)
     setChapterImage({ loading: true, imageUrl: null, error: null })
     try {
-      const res = await fetch('http://164.52.218.116/hacks/image', {
+      const res = await fetch('https://164.52.218.116/hacks/image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt }),
@@ -1004,7 +1004,7 @@ function EditorPage() {
         const text = htmlToPlainText(currentHtml).trim()
         if (!text) return
 
-        const validateRes = await fetch('http://164.52.218.116/hacks/verify', {
+        const validateRes = await fetch('https://164.52.218.116/hacks/verify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ input: text }),
@@ -1032,7 +1032,7 @@ function EditorPage() {
 
         // On bible save — insert only the synopsis
         if (!storyBible.synopsis?.trim()) return
-        const insertRes = await fetch('http://164.52.218.116/hacks/insert-chapter', {
+        const insertRes = await fetch('https://164.52.218.116/hacks/insert-chapter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: storyBible.synopsis.trim() }),
@@ -1050,7 +1050,7 @@ function EditorPage() {
     // // Post dynamic story payload
     // const storyBody = buildStoryRequestBody(currentOutline)
     // try {
-    //   await fetch('http://164.52.213.163/hacks/story', {
+    //   await fetch('https://164.52.213.163/hacks/story', {
     //     method: 'POST',
     //     headers: {
     //       'Content-Type': 'application/json',
@@ -1060,7 +1060,7 @@ function EditorPage() {
 
     //   setTimeout(async () => {
     //     try {
-    //       const summaryResponse = await fetch('http://164.52.213.163/hacks/get_summary', {
+    //       const summaryResponse = await fetch('https://164.52.213.163/hacks/get_summary', {
     //         method: 'POST',
     //         headers: {
     //           'Content-Type': 'application/json',
@@ -1316,7 +1316,7 @@ function EditorPage() {
       }
       console.log(requestBody);
       
-      const response = await fetch('http://164.52.218.116/hacks/synopsis', {
+      const response = await fetch('https://164.52.218.116/hacks/synopsis', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1361,7 +1361,7 @@ function EditorPage() {
         synopsis: storyBible.synopsis || 'No synopsis provided'
       }
 
-      const response = await fetch('http://164.52.218.116/hacks/worldbuilding', {
+      const response = await fetch('https://164.52.218.116/hacks/worldbuilding', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1409,7 +1409,7 @@ function EditorPage() {
         chapternumber: count || chapters.length || 1
       }
 
-      const response = await fetch('http://164.52.218.116/hacks/chapters', {
+      const response = await fetch('https://164.52.218.116/hacks/chapters', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

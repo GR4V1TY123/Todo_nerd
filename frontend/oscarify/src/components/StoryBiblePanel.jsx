@@ -67,7 +67,7 @@ function StoryBiblePanel({
       console.log("save bible hit");
       
       try {
-        await fetch('http://164.52.218.116/hacks/insert-chapter', {
+        await fetch('https://164.52.218.116/hacks/insert-chapter', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ text: storyBible.synopsis }),
