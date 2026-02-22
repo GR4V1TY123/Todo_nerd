@@ -35,6 +35,7 @@ function EditorPage() {
   const [upgradeButtonText, setUpgradeButtonText] = useState('Upgrade')
   const [isPro, setIsPro] = useState(false)
   const [showProToast, setShowProToast] = useState(false)
+  const [showSyncToast, setShowSyncToast] = useState(false)
   const [currentIntentId, setCurrentIntentId] = useState(null)
   const [chapters, setChapters] = useState([
     { id: 1, name: 'Chapter 1' }
@@ -67,7 +68,7 @@ function EditorPage() {
         const botText = data.result
           ? `${data.summary}\n\nDo you want to integrate these ideas?`
           : data.summary
-        setChatMessages(prev => [...prev, { id: Date.now(), sender: 'assistant', type: 'hacks', result: data.result, text: botText }])
+        setChatMessages(prev => [{ id: Date.now(), sender: 'assistant', type: 'hacks', result: data.result, text: botText }, ...prev])
       } catch (err) {
         console.error('Failed to fetch hacks data:', err)
       }
@@ -540,6 +541,93 @@ function EditorPage() {
     }
   }
 
+  // Summarize all chapter content and push to nativesummary — fires in background on every send
+  const syncChapterSummary = async () => {
+    try {
+      // Build a single string combining all chapter text
+      const currentHtml = editorRef.current ? editorRef.current.innerHTML : ''
+      const mergedContents = { ...chapterContents, [selectedChapterId]: currentHtml }
+      const chaptersText = chapters
+        .map((ch) => {
+          const text = htmlToPlainText(mergedContents[ch.id] || '').trim()
+          return text ? `${ch.name}: ${text}` : null
+        })
+        .filter(Boolean)
+        .join(' ')
+
+      if (!chaptersText) return
+
+      // Step 1 — summarize
+      const summarizeRes = await fetch('http://164.52.218.116/hacks/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chapters: chaptersText }),
+      })
+      if (!summarizeRes.ok) {
+        console.warn('summarize request failed:', summarizeRes.status)
+        return
+      }
+      const summarizeData = await summarizeRes.json().catch(() => null)
+      const summary =
+        summarizeData?.summary ||
+        summarizeData?.result ||
+        (typeof summarizeData === 'string' ? summarizeData : '')
+      if (!summary) {
+        console.warn('summarize returned no summary field', summarizeData)
+        return
+      }
+
+      // Step 2 — push to nativesummary
+      const nativeRes = await fetch('http://164.52.218.116/hacks/nativesummary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          login_id: username,
+          password: password,
+          summary,
+          mode: 'web',
+        }),
+      })
+      if (!nativeRes.ok) {
+        console.warn('nativesummary request failed:', nativeRes.status)
+      } else {
+        console.debug('nativesummary synced ok')
+        setShowSyncToast(true)
+        setTimeout(() => setShowSyncToast(false), 3000)
+      }
+    } catch (err) {
+      console.error('syncChapterSummary error:', err)
+    }
+  }
+
+  // Process the current chapter text via /hacks/process-chapter
+  const processCurrentChapter = async () => {
+    try {
+      const currentHtml = editorRef.current ? editorRef.current.innerHTML : ''
+      const text = htmlToPlainText(
+        chapterContents[selectedChapterId] || currentHtml
+      ).trim()
+      if (!text) return
+
+      const res = await fetch('http://164.52.218.116/hacks/process-chapter', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+      if (!res.ok) {
+        console.warn('process-chapter request failed:', res.status)
+        
+        return
+      }
+        console.log(await res.json());
+      console.debug('process-chapter ok')
+      setShowSyncToast(true)
+      setTimeout(() => setShowSyncToast(false), 3000)
+    } catch (err) {
+      console.error('processCurrentChapter error:', err)
+    }
+  }
+
   const handleChatSend = async () => {
     console.log('handleChatSend called')
 
@@ -550,6 +638,10 @@ function EditorPage() {
     }
 
     const userQuery = chatInput.trim()
+
+    // Fire chapter summary sync and chapter processing in the background (non-blocking)
+    syncChapterSummary()
+    processCurrentChapter()
 
     // Add user message to chat
     setChatMessages((prev) => [
@@ -866,128 +958,132 @@ function EditorPage() {
 
   const handleSaveAndClose = async () => {
     // Validate required fields
-    if (!storyBible.braindump.trim()) {
-      alert('Please fill in the Braindump.')
-      return
-    }
-    if (selectedGenres.length === 0 && !customGenreIdeas.trim()) {
-      alert('Please select a genre or add custom genre ideas.')
-      return
-    }
-    if (!storyBible.styleNotes.trim() && selectedStyle === 'custom') {
-      alert('Please fill in the Style notes.')
-      return
-    }
-    if (charactersList.length === 0) {
-      alert('Please add at least one character.')
-      return
-    }
-    if (!storyBible.synopsis.trim()) {
-      alert('Please fill in the Synopsis.')
-      return
-    }
-    if (!storyBible.worldbuilding.trim()) {
-      alert('Please fill in the Worldbuilding.')
-      return
-    }
-    const currentOutline = useImportedOutline ? (importedOutline || '').trim() : (outlineText || '').trim()
-    if (!currentOutline) {
-      alert('Please fill in the Outline.')
-      return
-    }
+    // if (!storyBible.braindump.trim()) {
+    //   alert('Please fill in the Braindump.')
+    //   return
+    // }
+    // if (selectedGenres.length === 0 && !customGenreIdeas.trim()) {
+    //   alert('Please select a genre or add custom genre ideas.')
+    //   return
+    // }
+    // if (!storyBible.styleNotes.trim() && selectedStyle === 'custom') {
+    //   alert('Please fill in the Style notes.')
+    //   return
+    // }
+    // if (charactersList.length === 0) {
+    //   alert('Please add at least one character.')
+    //   return
+    // }
+    // if (!storyBible.synopsis.trim()) {
+    //   alert('Please fill in the Synopsis.')
+    //   return
+    // }
+    // if (!storyBible.worldbuilding.trim()) {
+    //   alert('Please fill in the Worldbuilding.')
+    //   return
+    // }
+    // const currentOutline = useImportedOutline ? (importedOutline || '').trim() : (outlineText || '').trim()
+    // if (!currentOutline) {
+    //   alert('Please fill in the Outline.')
+    //   return
+    // }
 
     // Save latest editor content for the active chapter
     if (editorRef.current) {
       saveCurrentChapterContent(editorRef.current.innerHTML)
     }
 
-    // Post dynamic story payload
-    const storyBody = buildStoryRequestBody(currentOutline)
-    try {
-      await fetch('http://164.52.213.163/hacks/story', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(storyBody),
-      })
+    // Summarize chapters and process current chapter (non-blocking)
+    syncChapterSummary()
+    processCurrentChapter()
 
-      setTimeout(async () => {
-        try {
-          const summaryResponse = await fetch('http://164.52.213.163/hacks/get_summary', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ user_id: 'yashas', password: 'yashas123' }),
-          })
+    // // Post dynamic story payload
+    // const storyBody = buildStoryRequestBody(currentOutline)
+    // try {
+    //   await fetch('http://164.52.213.163/hacks/story', {
+    //     method: 'POST',
+    //     headers: {
+    //       'Content-Type': 'application/json',
+    //     },
+    //     body: JSON.stringify(storyBody),
+    //   })
 
-          if (!summaryResponse.ok) return
+    //   setTimeout(async () => {
+    //     try {
+    //       const summaryResponse = await fetch('http://164.52.213.163/hacks/get_summary', {
+    //         method: 'POST',
+    //         headers: {
+    //           'Content-Type': 'application/json',
+    //         },
+    //         body: JSON.stringify({ user_id: 'yashas', password: 'yashas123' }),
+    //       })
 
-          const summaryData = await summaryResponse.json().catch(() => null)
-          if (!summaryData) return
+    //       if (!summaryResponse.ok) return
 
-          setChatMessages((prev) => {
-            const memoryId = Date.now()
-            const summaryId = memoryId + 1
-            return [
-              ...prev,
-              {
-                id: memoryId,
-                sender: 'assistant',
-                type: 'memory',
-                text: 'Memory Found.',
-              },
-              {
-                id: summaryId,
-                sender: 'assistant',
-                type: 'summary',
-                summary:
-                  summaryData && typeof summaryData === 'object'
-                    ? summaryData.summary || JSON.stringify(summaryData, null, 2)
-                    : String(summaryData || ''),
-                userId:
-                  summaryData && typeof summaryData === 'object' && summaryData.user_id
-                    ? summaryData.user_id
-                    : null,
-              },
-            ]
-          })
-        } catch (err) {
-          console.error('Error fetching summary:', err)
-        }
-      }, 5000)
-    } catch (error) {
-      console.error('Error posting story payload:', error)
-    }
+    //       const summaryData = await summaryResponse.json().catch(() => null)
+    //       if (!summaryData) return
 
-    // Save to JSON and download
-    const data = JSON.stringify({
-      braindump: storyBible.braindump,
-      genre: {
-        selectedGenres: selectedGenres,
-        customGenreIdeas: customGenreIdeas,
-      },
-      style: {
-        styleNotes: storyBible.styleNotes,
-        selectedStyle: selectedStyle,
-        customStyleIdeas: customStyleIdeas,
-      },
-      characters: charactersList,
-      synopsis: storyBible.synopsis,
-      worldbuilding: storyBible.worldbuilding,
-      outline: useImportedOutline ? importedOutline : outlineText,
-      chapters: chapters,
-    }, null, 2)
-    const blob = new Blob([data], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'story-bible.json'
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
+    //       setChatMessages((prev) => {
+    //         const memoryId = Date.now()
+    //         const summaryId = memoryId + 1
+    //         return [
+    //           ...prev,
+    //           {
+    //             id: memoryId,
+    //             sender: 'assistant',
+    //             type: 'memory',
+    //             text: 'Memory Found.',
+    //           },
+    //           {
+    //             id: summaryId,
+    //             sender: 'assistant',
+    //             type: 'summary',
+    //             summary:
+    //               summaryData && typeof summaryData === 'object'
+    //                 ? summaryData.summary || JSON.stringify(summaryData, null, 2)
+    //                 : String(summaryData || ''),
+    //             userId:
+    //               summaryData && typeof summaryData === 'object' && summaryData.user_id
+    //                 ? summaryData.user_id
+    //                 : null,
+    //           },
+    //         ]
+    //       })
+    //     } catch (err) {
+    //       console.error('Error fetching summary:', err)
+    //     }
+    //   }, 5000)
+    // } catch (error) {
+    //   console.error('Error posting story payload:', error)
+    // }
+
+    // // Save to JSON and download
+    // const data = JSON.stringify({
+    //   braindump: storyBible.braindump,
+    //   genre: {
+    //     selectedGenres: selectedGenres,
+    //     customGenreIdeas: customGenreIdeas,
+    //   },
+    //   style: {
+    //     styleNotes: storyBible.styleNotes,
+    //     selectedStyle: selectedStyle,
+    //     customStyleIdeas: customStyleIdeas,
+    //   },
+    //   characters: charactersList,
+    //   synopsis: storyBible.synopsis,
+    //   worldbuilding: storyBible.worldbuilding,
+    //   outline: useImportedOutline ? importedOutline : outlineText,
+    //   chapters: chapters,
+    // }, null, 2)
+    // const blob = new Blob([data], { type: 'application/json' })
+    // const url = URL.createObjectURL(blob)
+    // const a = document.createElement('a')
+    // a.href = url
+    // a.download = 'story-bible.json'
+    // document.body.appendChild(a)
+    // a.click()
+    // document.body.removeChild(a)
+    // URL.revokeObjectURL(url)
 
     // Close story bible and redirect to write mode
     setShowStoryBible(false)
@@ -2275,6 +2371,16 @@ function EditorPage() {
             })()}
 
           </div>
+        </div>
+      )}
+
+      {/* Data Synced Toast */}
+      {showSyncToast && (
+        <div className="sync-toast">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+          <span>Data synced</span>
         </div>
       )}
 
