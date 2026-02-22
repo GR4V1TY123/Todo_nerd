@@ -94,6 +94,9 @@ function EditorPage() {
   const [isRecording, setIsRecording] = useState(false)
   const recognitionRef = useRef(null)
   const [importedOutline, setImportedOutline] = useState('')
+  const [isSpeaking, setIsSpeaking] = useState(false)
+  const [speakingMsgId, setSpeakingMsgId] = useState(null)
+  const ttsAudioRef = useRef(null)
 
   // Auto-resize textarea helper
   const handleTextareaAutoResize = (e) => {
@@ -658,6 +661,67 @@ function EditorPage() {
     }
 
     recognition.start()
+  }
+
+  const handleTTS = async (text, msgId = null) => {
+    // If already speaking, stop playback
+    if (isSpeaking) {
+      if (ttsAudioRef.current) {
+        ttsAudioRef.current.pause()
+        ttsAudioRef.current = null
+      }
+      setIsSpeaking(false)
+      setSpeakingMsgId(null)
+      return
+    }
+
+    // If no text provided, fallback to last assistant message
+    if (!text) {
+      const lastAssistantMsg = [...chatMessages].reverse().find(m => m.sender === 'assistant')
+      if (!lastAssistantMsg) return
+      text = lastAssistantMsg.text || ''
+      msgId = lastAssistantMsg.id
+    }
+
+    if (!text.trim()) return
+
+    try {
+      setIsSpeaking(true)
+      setSpeakingMsgId(msgId)
+
+      const res = await fetch('http://164.52.218.116/hacks/tts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+
+      if (!res.ok) throw new Error('TTS request failed')
+
+      const blob = await res.blob()
+      const audioUrl = URL.createObjectURL(blob)
+      const audio = new Audio(audioUrl)
+      ttsAudioRef.current = audio
+
+      audio.onended = () => {
+        setIsSpeaking(false)
+        setSpeakingMsgId(null)
+        ttsAudioRef.current = null
+        URL.revokeObjectURL(audioUrl)
+      }
+
+      audio.onerror = () => {
+        setIsSpeaking(false)
+        setSpeakingMsgId(null)
+        ttsAudioRef.current = null
+        URL.revokeObjectURL(audioUrl)
+      }
+
+      await audio.play()
+    } catch (err) {
+      console.error('TTS error:', err)
+      setIsSpeaking(false)
+      setSpeakingMsgId(null)
+    }
   }
 
   const handleChatAttachment = (type) => {
@@ -1909,6 +1973,15 @@ function EditorPage() {
                     ) : (
                       msg.text
                     )}
+                    {msg.sender === 'assistant' && msg.text && (
+                      <button
+                        className={`tts-btn${speakingMsgId === msg.id ? ' speaking' : ''}`}
+                        onClick={() => handleTTS(msg.text, msg.id)}
+                        title={speakingMsgId === msg.id ? 'Stop speaking' : 'Read aloud'}
+                      >
+                        {speakingMsgId === msg.id ? '⏹' : '🔊'}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
@@ -1944,6 +2017,13 @@ function EditorPage() {
                 title={isRecording ? 'Stop recording' : 'Start voice input'}
               >
                 🎤
+              </button>
+              <button
+                className={`chat-input-icon ${isSpeaking ? 'speaking' : ''}`}
+                onClick={() => handleTTS()}
+                title={isSpeaking ? 'Stop speaking' : 'Read last response aloud'}
+              >
+                {isSpeaking ? '⏹' : '🔊'}
               </button>
             </div>
           </div>
