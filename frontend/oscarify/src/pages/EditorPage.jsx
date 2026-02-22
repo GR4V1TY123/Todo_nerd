@@ -462,10 +462,10 @@ function EditorPage() {
       const text = htmlToPlainText(currentHtml).trim()
       if (!text) return
 
-      const validateRes = await fetch('http://164.52.218.116/hacks/validate-chapter', {
+      const validateRes = await fetch('http://164.52.218.116/hacks/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ input: text }),
       })
       if (!validateRes.ok) {
         console.warn('validate-chapter request failed:', validateRes.status)
@@ -477,14 +477,15 @@ function EditorPage() {
       
       console.debug('validate-chapter response:', validateData)
 
-      if (!validateData.consistent) {
+      const issues = validateData?.response?.issues
+      if (Array.isArray(issues) && issues.length > 0) {
         setChatMessages((prev) => [
           ...prev,
           {
             id: Date.now(),
             sender: 'assistant',
-            type: 'validation-error',
-            text: validateData.report || 'Consistency issue detected.',
+            type: 'verify-issues',
+            issues,
           },
         ])
       }
@@ -879,19 +880,19 @@ function EditorPage() {
         const validateData = await validateRes.json()
         console.debug('validate-chapter response (save):', validateData)
 
-        if (!validateData.consistent) {
-          // Show consistency error in chat
-          setChatMessages((prev) => [
-            ...prev,
-            {
-              id: Date.now(),
-              sender: 'assistant',
-              type: 'validation-error',
-              text: validateData.report || 'Consistency issue detected.',
-            },
-          ])
-          return
-        }
+        const issues = validateData?.response?.issues
+        // if (Array.isArray(issues) && issues.length > 0) {
+        //   setChatMessages((prev) => [
+        //     ...prev,
+        //     {
+        //       id: Date.now(),
+        //       sender: 'assistant',
+        //       type: 'verify-issues',
+        //       issues,
+        //     },
+        //   ])
+        //   return
+        // }
 
         // consistent === true → call insert-chapter
         const synopsis = storyBible.synopsis ? `Synopsis: ${storyBible.synopsis}\n\n` : ''
@@ -1868,6 +1869,42 @@ function EditorPage() {
                       <div style={{ background: '#ef444422', border: '1px solid #ef4444', borderRadius: 8, padding: '10px 14px', color: '#ef4444' }}>
                         <div style={{ fontWeight: 600, marginBottom: 4 }}>⚠ Consistency Issue</div>
                         <div style={{ fontSize: '0.9em', lineHeight: 1.5 }}>{msg.text}</div>
+                      </div>
+                    ) : msg.type === 'verify-issues' ? (
+                      <div style={{ border: '1px solid #ef4444', borderRadius: 10, padding: '12px 14px', background: '#ef444411' }}>
+                        <div style={{ fontWeight: 700, color: '#ef4444', marginBottom: 10, fontSize: '0.88em', letterSpacing: '0.04em' }}>
+                          ⚠ {msg.issues.length} Consistency {msg.issues.length === 1 ? 'Issue' : 'Issues'} Found
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {msg.issues.map((issue, i) => {
+                            const sev = issue.severity ?? 0
+                            const sevColor = sev >= 0.7 ? '#ef4444' : sev >= 0.4 ? '#f59e0b' : '#22c55e'
+                            const sevLabel = sev >= 0.7 ? 'High' : sev >= 0.4 ? 'Medium' : 'Low'
+                            return (
+                              <div key={i} style={{ borderRadius: 8, padding: '10px 12px', borderLeft: `3px solid ${sevColor}`, background: '#ffffff08' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                  <span style={{ fontWeight: 700, fontSize: '0.88em' }}>{issue.section}</span>
+                                  <span style={{ fontSize: '0.74em', fontWeight: 600, color: sevColor, background: `${sevColor}22`, borderRadius: 4, padding: '1px 7px' }}>
+                                    {sevLabel}
+                                  </span>
+                                </div>
+                                {issue.type && (
+                                  <div style={{ fontSize: '0.72em', color: '#94a3b8', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                                    {issue.type}
+                                  </div>
+                                )}
+                                <div style={{ fontSize: '0.87em', lineHeight: 1.5, marginBottom: issue.evidence ? 6 : 0 }}>
+                                  {issue.problem}
+                                </div>
+                                {issue.evidence && (
+                                  <div style={{ fontSize: '0.82em', color: '#94a3b8', fontStyle: 'italic', borderLeft: '2px solid #475569', paddingLeft: 8, marginTop: 4 }}>
+                                    &ldquo;{issue.evidence}&rdquo;
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
                       </div>
                     ) : (
                       msg.text
