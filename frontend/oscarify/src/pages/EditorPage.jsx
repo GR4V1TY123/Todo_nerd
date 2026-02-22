@@ -48,6 +48,8 @@ function EditorPage() {
   const editorRef = useRef(null)
   const charactersFormRef = useRef(null)
   const hacksFetchedRef = useRef(false)
+  const processCurrentChapterRef = useRef(null)
+  const suggestionsRef = useRef(null)
 
   // Fetch hacks data on mount
   useEffect(() => {
@@ -136,60 +138,7 @@ function EditorPage() {
     }
   }
 
-  const postEditorSnapshot = async (contentHtml) => {
-    const payload = buildEditorPayload(contentHtml)
-    console.debug('editor snapshot payload', payload)
-    if (!payload.input) return
-
-    try {
-      console.debug('posting editor snapshot to /hacks/editor')
-      const response = await fetch('http://164.52.213.163/hacks/editor', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-
-      if (!response.ok) {
-        console.warn('editor snapshot response not ok', response.status)
-        return
-      }
-
-      const data = await response.json().catch(() => null)
-      console.debug('editor snapshot response', data)
-      if (!data || typeof data !== 'object') return
-
-      const verdict = data.verdict && typeof data.verdict === 'object' ? data.verdict : data
-      const notes = typeof verdict.notes === 'string' ? verdict.notes : ''
-      const boolEntries = Object.entries(verdict).filter(([, v]) => typeof v === 'boolean')
-      const hasFalse = boolEntries.some(([, v]) => v === false)
-
-      if (hasFalse) {
-        setConsistencyToast({ show: true, message: 'Inconsistency detected' })
-        setTimeout(() => setConsistencyToast({ show: false, message: '' }), 10000)
-      }
-
-      if (notes || boolEntries.length) {
-        const formatLabel = (label) => label.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-        const checks = boolEntries.map(([label, value]) => ({ label: formatLabel(label), value }))
-        setChatMessages((prev) => [
-          ...prev,
-          {
-            id: Date.now(),
-            sender: 'assistant',
-            type: 'consistency',
-            notes,
-            checks,
-          },
-        ])
-      }
-
-      console.debug('posted editor snapshot ok')
-    } catch (error) {
-      console.error('Error posting editor snapshot:', error)
-    }
-  }
+  
 
   const buildCouncilInput = () => {
     const currentHtml = editorRef.current ? editorRef.current.innerHTML : ''
@@ -281,13 +230,13 @@ function EditorPage() {
     if (e.key !== 'Enter') return
 
     console.debug('keydown Enter detected in editor')
-    // Allow the DOM to apply the newline before capturing content
+    // Allow the DOM to apply the newline before capturing content, then validate
     setTimeout(() => {
       const target = e.currentTarget || editorRef.current
       if (!target) return
       const contentHtml = target.innerHTML
       saveCurrentChapterContent(contentHtml)
-      postEditorSnapshot(contentHtml)
+      processCurrentChapterRef.current?.()
     }, 0)
   }
 
@@ -298,10 +247,10 @@ function EditorPage() {
     setEditorHtml(content)
     saveCurrentChapterContent(content)
 
-    // Fire snapshot when Enter inserts a paragraph (covers cases where keydown may miss)
+    // Validate chapter when Enter inserts a paragraph (covers cases where keydown may miss)
     if (e.inputType === 'insertParagraph') {
       console.debug('input insertParagraph detected in editor')
-      postEditorSnapshot(content)
+      processCurrentChapterRef.current?.()
     }
   }
 
@@ -418,6 +367,14 @@ function EditorPage() {
     })
   }, [storyBible, outlineText, customGenreIdeas, customStyleIdeas])
 
+  // Call /suggestions every 1 minute (ref ensures latest state is used)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      suggestionsRef.current?.()
+    }, 5 * 60 * 1000)
+    return () => clearInterval(interval)
+  }, [])
+
   const handleDocMenuClick = () => {
     alert('Document options (rename, duplicate, etc.) will appear here later.')
   }
@@ -435,110 +392,8 @@ function EditorPage() {
     }
   }
 
-  const buildConvoPayload = (userQuery) => {
-    const primaryGenre = selectedGenres[0] || customGenreIdeas || ''
-    const secondaryGenre = selectedGenres[1] || ''
-    const outlineValue = useImportedOutline ? (importedOutline || '') : (outlineText || '')
-
-    const chaptersPayload = chapters.map((ch, idx) => `Chapter ${idx + 1}: ${ch.name}`)
-    const charactersPayload = charactersList
-      .map((ch) => {
-        if (!ch.name && !ch.role && !ch.summary) return null
-        const role = ch.role ? ` – ${ch.role}` : ''
-        const desc = ch.summary ? ` (${ch.summary})` : ''
-        return `${ch.name || 'Character'}${role}${desc}`
-      })
-      .filter(Boolean)
-
-    const recentMessages = [...chatMessages].reverse()
-    const lastUser = recentMessages.find((m) => m.sender === 'user')
-    const lastAssistant = recentMessages.find((m) => m.sender === 'assistant')
-
-    const previousContext = lastUser || lastAssistant
-      ? {
-        user_query: lastUser?.text || '',
-        ai_response: lastAssistant?.summary || lastAssistant?.text || '',
-      }
-      : undefined
-
-    return {
-      user_qry: userQuery,
-      braindump: storyBible.braindump || '',
-      genre: {
-        primary: primaryGenre,
-        secondary: secondaryGenre,
-      },
-      style: {
-        tone: storyBible.styleNotes || customStyleIdeas || '',
-        pacing: selectedStyle || '',
-      },
-      characters: charactersPayload,
-      synopsis: storyBible.synopsis || '',
-      worldbuilding: storyBible.worldbuilding || '',
-      outline: outlineValue,
-      chapters: chaptersPayload,
-      previous_context: previousContext,
-    }
-  }
-
-  const sendConvoQuery = async (userQuery) => {
-    console.log("sendConvoQuery called")
-    console.debug('sendConvoQuery called with:', userQuery)
-    const payload = buildConvoPayload(userQuery)
-    console.debug('convo payload:', payload)
-
-    try {
-      console.debug('posting to /hacks/convo')
-      const response = await fetch('http://164.52.213.163/hacks/convo', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-
-      console.debug('convo response status:', response.status)
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`)
-      }
-
-      const data = await response.json().catch(() => null)
-      console.debug('convo response data:', data)
-      const responseText =
-        data && typeof data === 'object' && data.response
-          ? data.response
-          : data
-            ? JSON.stringify(data, null, 2)
-            : 'No response received.'
-
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          sender: 'assistant',
-          type: 'convo',
-          title: 'Story response',
-          text: responseText,
-        },
-      ])
-
-      setTimeout(() => {
-        chatBodyRef.current?.scrollTo({
-          top: chatBodyRef.current.scrollHeight,
-          behavior: 'smooth',
-        })
-      }, 100)
-    } catch (error) {
-      console.error('Error sending convo:', error)
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          sender: 'assistant',
-          text: 'Sorry, I could not fetch the response right now.',
-        },
-      ])
-    }
+  const sendConvoQuery = async (_userQuery) => {
+    // convo endpoint removed
   }
 
   // Summarize all chapter content and push to nativesummary — fires in background on every send
@@ -600,16 +455,13 @@ function EditorPage() {
     }
   }
 
-  // Validate current chapter then insert if consistent
-  const processCurrentChapter = async () => {
+  // Validate current chapter on Enter — shows report in chat if inconsistent
+  const validateCurrentChapter = async () => {
     try {
       const currentHtml = editorRef.current ? editorRef.current.innerHTML : ''
-      const text = htmlToPlainText(
-        chapterContents[selectedChapterId] || currentHtml
-      ).trim()
+      const text = htmlToPlainText(currentHtml).trim()
       if (!text) return
 
-      // Step 1: validate chapter consistency
       const validateRes = await fetch('http://164.52.218.116/hacks/validate-chapter', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -619,11 +471,13 @@ function EditorPage() {
         console.warn('validate-chapter request failed:', validateRes.status)
         return
       }
+      
       const validateData = await validateRes.json()
+      console.log(text, validateData);
+      
       console.debug('validate-chapter response:', validateData)
 
       if (!validateData.consistent) {
-        // Show report in chat with red background
         setChatMessages((prev) => [
           ...prev,
           {
@@ -633,26 +487,69 @@ function EditorPage() {
             text: validateData.report || 'Consistency issue detected.',
           },
         ])
-        return
       }
-
-      // Step 2: insert chapter since it's consistent
-      const insertRes = await fetch('http://164.52.218.116/hacks/insert-chapter', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      })
-      if (!insertRes.ok) {
-        console.warn('insert-chapter request failed:', insertRes.status)
-        return
-      }
-      console.debug('insert-chapter ok')
-      setShowSyncToast(true)
-      setTimeout(() => setShowSyncToast(false), 3000)
     } catch (err) {
-      console.error('processCurrentChapter error:', err)
+      console.error('validateCurrentChapter error:', err)
     }
   }
+  // Keep validate ref in sync on every render
+  processCurrentChapterRef.current = validateCurrentChapter
+
+  // Fetch suggestions every 5 minutes
+  const fetchSuggestions = async () => {
+    try {
+      const currentHtml = editorRef.current ? editorRef.current.innerHTML : ''
+      const text = htmlToPlainText(currentHtml).trim()
+      if (!text) return
+
+      const res = await fetch('http://164.52.218.116/hacks/suggest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ input: text }),
+      })
+      if (!res.ok) {
+        console.warn('suggestions request failed:', res.status)
+        return
+      }
+      const data = await res.json()
+      console.log('suggestions response:', data)
+
+      // Parse nested JSON string in response field
+      let suggestions = []
+      try {
+        const inner = typeof data.response === 'string' ? JSON.parse(data.response) : data.response
+        if (Array.isArray(inner?.suggestions)) {
+          suggestions = inner.suggestions
+        } else if (Array.isArray(inner)) {
+          suggestions = inner
+        }
+      } catch {
+        // fallback: treat as plain text
+      }
+
+      if (suggestions.length === 0) {
+        // Fallback plain text path
+        const fallback = data?.suggestions || data?.suggestion || data?.response ||
+          (typeof data === 'string' ? data : null)
+        if (!fallback) return
+        suggestions = typeof fallback === 'string' ? [fallback] : fallback
+      }
+
+      setChatMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now(),
+          sender: 'assistant',
+          type: 'suggestions',
+          suggestions,
+        },
+      ])
+    } catch (err) {
+      console.error('fetchSuggestions error:', err)
+    }
+  }
+  // Keep suggestions ref in sync on every render
+  suggestionsRef.current = fetchSuggestions
 
   const handleChatSend = async () => {
     console.log('handleChatSend called')
@@ -665,9 +562,9 @@ function EditorPage() {
 
     const userQuery = chatInput.trim()
 
-    // Fire chapter summary sync and chapter processing in the background (non-blocking)
+    // Fire chapter summary sync and chapter validation in the background (non-blocking)
     syncChapterSummary()
-    processCurrentChapter()
+    validateCurrentChapter()
 
     // Add user message to chat
     setChatMessages((prev) => [
@@ -679,65 +576,6 @@ function EditorPage() {
       },
     ])
     setChatInput('')
-
-    // Build payload with user_qry from textbox and dynamic story data
-    const payload = buildConvoPayload(userQuery)
-    console.log('Sending to /hacks/convo with user_qry:', userQuery)
-    console.log('Full payload:', payload)
-
-    try {
-      const response = await fetch('http://164.52.213.163/hacks/convo', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      })
-
-      console.log('Response status:', response.status)
-
-      if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`)
-      }
-
-      const data = await response.json()
-      console.log('Response data:', data)
-
-      const responseText =
-        data && typeof data === 'object' && data.response
-          ? data.response
-          : data
-            ? JSON.stringify(data, null, 2)
-            : 'No response received.'
-
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          sender: 'assistant',
-          type: 'convo',
-          title: 'Story response',
-          text: responseText,
-        },
-      ])
-
-      setTimeout(() => {
-        chatBodyRef.current?.scrollTo({
-          top: chatBodyRef.current.scrollHeight,
-          behavior: 'smooth',
-        })
-      }, 100)
-    } catch (error) {
-      console.error('Error hitting convo API:', error)
-      setChatMessages((prev) => [
-        ...prev,
-        {
-          id: Date.now(),
-          sender: 'assistant',
-          text: `Error: ${error.message}`,
-        },
-      ])
-    }
   }
 
   const handleDismissConsistencyMessage = (id) => {
@@ -1019,9 +857,58 @@ function EditorPage() {
       saveCurrentChapterContent(editorRef.current.innerHTML)
     }
 
-    // Summarize chapters and process current chapter (non-blocking)
+    // Summarize chapters in background (non-blocking)
     syncChapterSummary()
-    processCurrentChapter()
+
+    // Validate current chapter, then insert only if consistent
+    ;(async () => {
+      try {
+        const currentHtml = editorRef.current ? editorRef.current.innerHTML : ''
+        const text = htmlToPlainText(currentHtml).trim()
+        if (!text) return
+
+        const validateRes = await fetch('http://164.52.218.116/hacks/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ input: text }),
+        })
+        if (!validateRes.ok) {
+          console.warn('validate-chapter request failed:', validateRes.status)
+          return
+        }
+        const validateData = await validateRes.json()
+        console.debug('validate-chapter response (save):', validateData)
+
+        if (!validateData.consistent) {
+          // Show consistency error in chat
+          setChatMessages((prev) => [
+            ...prev,
+            {
+              id: Date.now(),
+              sender: 'assistant',
+              type: 'validation-error',
+              text: validateData.report || 'Consistency issue detected.',
+            },
+          ])
+          return
+        }
+
+        // consistent === true → call insert-chapter
+        const synopsis = storyBible.synopsis ? `Synopsis: ${storyBible.synopsis}\n\n` : ''
+        const insertRes = await fetch('http://164.52.218.116/hacks/insert-chapter', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: `${synopsis}${text}` }),
+        })
+        if (!insertRes.ok) {
+          console.warn('insert-chapter request failed:', insertRes.status)
+        } else {
+          console.debug('insert-chapter synced ok')
+        }
+      } catch (err) {
+        console.error('save validate+insert error:', err)
+      }
+    })()
 
     // // Post dynamic story payload
     // const storyBody = buildStoryRequestBody(currentOutline)
@@ -1365,7 +1252,7 @@ function EditorPage() {
     }
   }
 
-  const handleGenerateChapters = async () => {
+  const handleGenerateChapters = async (count) => {
     setIsGeneratingChapters(true)
     try {
       const genreString = selectedGenres.length > 0
@@ -1380,7 +1267,7 @@ function EditorPage() {
         style: styleString,
         synopsis: storyBible.synopsis || 'No synopsis provided',
         worldbuilding: storyBible.worldbuilding || 'No worldbuilding provided',
-        chapternumber: chapters.length || 1
+        chapternumber: count || chapters.length || 1
       }
 
       const response = await fetch('http://164.52.218.116/hacks/chapters', {
@@ -1632,13 +1519,15 @@ function EditorPage() {
         <div className="sidebar-footer">
           <button
             className="sidebar-action-btn"
-            onClick={() => handleSidebarAction('AI Helper')}
+            onClick={() => fetchSuggestions()}
             style={{ width: '100%', marginBottom: 12 }}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M12 2l2.09 6.26L20 9l-5 3.64L16.18 19 12 15.9 7.82 19 9 12.64 4 9l5.91-.74L12 2z" />
+              <circle cx="12" cy="12" r="10" />
+              <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" />
             </svg>
-            AI Helper
+            Suggestions
           </button>
           <div className="sidebar-trash" onClick={handleTrashClick}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -1966,6 +1855,15 @@ function EditorPage() {
                       </div>
                     ) : msg.type === 'memory' ? (
                       <div className="memory-message">{msg.text}</div>
+                    ) : msg.type === 'suggestions' ? (
+                      <div style={{ background: '#fef08a', border: '1px solid #eab308', borderRadius: 10, padding: '10px 14px' }}>
+                        <div style={{ fontWeight: 700, marginBottom: 8, color: '#713f12', fontSize: '0.85em', letterSpacing: '0.04em' }}>💡 Here are some suggestions</div>
+                        <ol style={{ margin: 0, paddingLeft: 18, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {msg.suggestions.map((s, i) => (
+                            <li key={i} style={{ fontSize: '0.9em', lineHeight: 1.6, color: '#422006' }}>{s}</li>
+                          ))}
+                        </ol>
+                      </div>
                     ) : msg.type === 'validation-error' ? (
                       <div style={{ background: '#ef444422', border: '1px solid #ef4444', borderRadius: 8, padding: '10px 14px', color: '#ef4444' }}>
                         <div style={{ fontWeight: 600, marginBottom: 4 }}>⚠ Consistency Issue</div>
