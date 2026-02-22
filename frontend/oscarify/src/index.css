@@ -4400,6 +4400,12 @@ img {
   background: var(--bg-light);
 }
 
+.editor-tts-btn.speaking {
+  color: #7b5ea7;
+  border-color: #7b5ea7;
+  animation: pulse 1s infinite;
+}
+
 .quick-action-icon {
   width: 18px;
   height: 18px;
@@ -4541,7 +4547,9 @@ img {
 
 .chat-input-icons {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .chat-input-icon {
@@ -4630,16 +4638,24 @@ img {
 }
 
 .chat-send-btn {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--primary-purple);
   color: white;
   border-radius: 6px;
-  font-size: 16px;
-  margin-left: auto;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.chat-send-btn:hover {
+  background: #6a4f96;
+  transform: scale(1.05);
 }
 
 .chat-footer-buttons {
